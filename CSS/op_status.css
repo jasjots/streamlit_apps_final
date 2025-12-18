@@ -1,0 +1,19 @@
+/* Reduce top padding of Streamlit page */
+.block-container {
+    padding-top: 1.8rem !important;
+}
+
+/* Reduce extra space added by spinner */
+div[data-testid="stSpinner"] {
+    margin-top: -5px !important;
+}
+
+/* Sidebar background color */
+[data-testid="stSidebar"] {
+    background-color: #3B82F6 !important;
+}
+
+/* Sidebar text color */
+[data-testid="stSidebar"] * {
+    color: white !important;
+}

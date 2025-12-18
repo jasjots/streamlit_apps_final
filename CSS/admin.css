@@ -1,0 +1,80 @@
+/* Reduce top padding of Streamlit page */
+.block-container {
+    padding-top: 1.8rem !important;
+}
+
+/* Reduce extra space added by spinner */
+div[data-testid="stSpinner"] {
+    margin-top: -5px !important;
+}
+
+/* Sidebar background color */
+[data-testid="stSidebar"] {
+    background-color: #3B82F6 !important;
+}
+
+/* Sidebar text color */
+[data-testid="stSidebar"] * {
+    color: white !important;
+}
+
+.st-emotion-cache-1kq4mb7 h1 {
+    font-size: 2.75rem;
+    font-weight: 700;
+    padding: 0.25rem 0px 1rem;
+}
+
+/* ===== Common Section Container (Add User + Existing Users) ===== */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 14px !important;
+    border: 1.5px solid #CBD5E1 !important;
+    padding: 22px !important;
+    background-color: #ffffff !important;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+    margin-bottom: 28px;
+}
+
+/* Section Titles */
+.section-title {
+    font-family: Inter, sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: #0F172A;
+    margin-bottom: 18px;
+}
+
+/* ===== User Row Card ===== */
+.user-row-card {
+    background-color: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    transition: all 0.2s ease-in-out;
+}
+
+/* Hover effect */
+.user-row-card:hover {
+    background-color: #F1F5F9;
+    border-color: #CBD5E1;
+}
+
+/* Username text */
+.user-text {
+    font-weight: 500;
+    font-size: 14px;
+    color: #0F172A;
+    margin-top: 12px;
+}
+
+/* Buttons */
+.user-row-card button {
+    border-radius: 8px !important;
+    font-size: 13px !important;
+}
+
+/* Save button emphasis */
+.user-row-card button:first-of-type {
+    background-color: #2563EB !important;
+    color: white !important;
+}

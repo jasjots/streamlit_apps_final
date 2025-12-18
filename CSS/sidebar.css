@@ -1,0 +1,119 @@
+/* ===============================
+   STATIC SIDEBAR CONTAINER
+================================ */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0F172A, #1E293B);
+    width: 100px !important;
+    min-width: 100px !important;
+    max-width: 100px !important;
+    overflow: hidden !important;
+    transform: none !important;
+}
+
+/* Prevent collapsed state completely */
+[data-testid="stSidebar"][aria-expanded="false"] {
+    width: 100px !important;
+    min-width: 100px !important;
+    max-width: 100px !important;
+    transform: none !important;
+}
+
+/* ===============================
+   REMOVE STREAMLIT DEFAULT UI
+================================ */
+[data-testid="stSidebarNav"],
+section[data-testid="stSidebar"] ul,
+section[data-testid="stSidebar"] li {
+    display: none !important;
+}
+
+/* Hide collapse / expand arrow */
+button[data-testid="collapsedControl"],
+button[aria-label="Collapse sidebar"],
+button[aria-label="Expand sidebar"] {
+    display: none !important;
+}
+
+/* Hide sidebar header completely */
+[data-testid="stSidebarHeader"] {
+    display: none !important;
+    height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* ===============================
+   SIDEBAR BUTTON STYLE
+================================ */
+[data-testid="stSidebar"] button {
+    width: 56px !important;
+    height: 56px !important;
+    margin: -40px auto -5px 1px !important;
+    border-radius: 14px !important;
+    background: #FFFFFF !important;
+    border: none !important;
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
+}
+
+/* ===============================
+   ICON INSIDE BUTTON
+================================ */
+.icon-wrapper {
+    position: relative;
+    top: -48px;           /* Pull icon into button */
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+}
+
+/* SVG / PNG icon */
+.sidebar-icon-img {
+    width: 22px;
+    height: 22px;
+    color: #0F172A;       /* Dark icon */
+}
+
+/* ===============================
+   LABEL BELOW BUTTON
+================================ */
+.sidebar-label {
+    font-size: 11px;
+    color: #CBD5E1;
+    text-align: center;
+    margin: -29px auto 50px -3px;
+    font-family: Inter, sans-serif;
+}
+
+/* ===============================
+   MAIN CONTENT SPACING FIX
+================================ */
+.st-emotion-cache-1echtaq {
+    padding-top: 4.5rem;
+    padding-bottom: 6rem;
+}
+
+
+/* ===============================
+   FADE OTHERS ON HOVER
+================================ */
+
+/* Smooth transition */
+[data-testid="stSidebar"] button {
+    transition: opacity 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* When hovering inside sidebar, fade all buttons */
+[data-testid="stSidebar"]:hover button {
+    opacity: 0.35;
+}
+
+/* Keep hovered button fully visible */
+[data-testid="stSidebar"] button:hover {
+    opacity: 1;
+    box-shadow: 0 0 0 2px #3B82F6; /* subtle focus ring */
+}
+
+/* Keep icon sharp */
+[data-testid="stSidebar"] button:hover + .icon-wrapper .sidebar-icon-img {
+    filter: brightness(0.85);
+}

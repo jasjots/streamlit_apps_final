@@ -1,0 +1,12 @@
+[theme]
+#primaryColor = "#736243"        # Claude logo terra cotta warm accent :contentReference[oaicite:1]{index=1}
+#backgroundColor = "#EEECE2"     # Light neutral background on site :contentReference[oaicite:2]{index=2}
+#secondaryBackgroundColor = "#DBD3C3"  # Warm neutral for cards/containers :contentReference[oaicite:3]{index=3}
+#textColor = "#3D3929"           # Dark text tone used on website :contentReference[oaicite:4]{index=4}
+#font = "sans serif"
+
+primaryColor = "#15348B"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F6F8FB" #"#F4F9FC"
+textColor = "#26333F"
+font = "sans serif"

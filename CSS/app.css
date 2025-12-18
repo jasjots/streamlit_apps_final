@@ -1,0 +1,97 @@
+.status-card {
+            text-align: left;
+            background-color: #fff;
+            border-radius: 10px;
+            margin: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            width: 200px;   /* fixed width */
+            height: 120px;  /* fixed height */
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s ease-in-out;
+            justify-content: center;
+        }
+
+.status-card p {
+            font-size: 15px;
+            font-family:'Inter', sans-serif;
+            margin: 20px 20px 0 20px;
+            color: #333;
+            padding: 14px 0 0 0; 
+        }
+
+.status-card h2 {
+        
+            font-size: 32px;
+            font-family: 'Inter', sans-serif;
+            color: #000;
+            margin: 0 20px 20px 20px;
+        }
+
+.status-card:hover {
+        transform: scale(1.05);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+        background: #f0f8ff;
+        }
+
+
+.job-status-box {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+    display: inline-block;
+    color: white;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.dashboard-box {
+            background-color: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px auto;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+            max-width: 1200px;
+            animation: fadeIn 1s ease-in-out;
+        }
+
+h1.hover-effect {
+            color: Black;
+            font-family: 'Inter', sans-serif;
+            font-size: 22px;
+            margin-bottom: 20px;
+            text-align: left;
+            transition: transform 0.3s ease;
+            display: inline-block;
+            transform-origin: center;
+        }
+
+h1.hover-effect:hover {
+          transform: scale(1.05);
+        }
+
+@keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+         
+        }
+
+/* Sidebar background color */
+[data-testid="stSidebar"] {
+    background-color: #3B82F6 !important;
+}
+
+/* Sidebar text color */
+[data-testid="stSidebar"] * {
+    color: white !important;
+}
+
+/* Reduce top padding of Streamlit page */
+.block-container {
+    padding-top: 1.8rem !important;
+}
+
+/* Reduce extra space added by spinner */
+div[data-testid="stSpinner"] {
+    margin-top: -5px !important;
+}
