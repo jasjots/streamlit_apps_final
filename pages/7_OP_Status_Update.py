@@ -20,11 +20,10 @@ load_css("CSS/op_status.css")
 from sidebar import render_sidebar
 render_sidebar()
 
-# Data loading functions with caching
+# Data loading functions
 
-@st.cache_data(ttl=300, show_spinner=False)
 def get_dbt_api_failed_jobs(param, time_input_start, time_input_end):
-    """Cached query for DBT API failed jobs."""
+    """Query for DBT API failed jobs."""
     time_input_start = str(time_input_start).replace('+00:00', '')
     time_input_end = str(time_input_end).replace('+00:00', '')
 
@@ -95,9 +94,8 @@ def get_dbt_api_failed_jobs(param, time_input_start, time_input_end):
     return merged_df
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def get_matillion_failed_dataframe():
-    """Cached query for failed Matillion jobs."""
+    """Query for failed Matillion jobs."""
     query = """
     with cte_mat_temp as(
         SELECT upper(sd.name) as SCHEDULE_NAME, upper (rh.job_name) JOB_TAG_NAME, DAYOFWEEK(rh.START_TIME_PST),
@@ -137,9 +135,8 @@ def get_matillion_failed_dataframe():
     return task_df
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def get_matillion_running_queue():
-    """Cached query for running/queued Matillion jobs."""
+    """Query for running/queued Matillion jobs."""
     mat_session = session
     time_query = f"""
     SELECT
@@ -182,9 +179,8 @@ def get_matillion_running_queue():
     return mat_data[mat_data['STATUS'] == 'FAILED']
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def get_dbt_failed_data():
-    """Cached query for failed DBT jobs."""
+    """Query for failed DBT jobs."""
     dbt_session = session
     query_failed = '''
         SELECT distinct cast(fj.id as number) as TASK_HISTORY_ID,upper(st.NAME) AS schedule_name, st.execute_steps AS JOB_TAG_NAME,
@@ -230,9 +226,8 @@ def get_dbt_failed_data():
     return final_fail_df
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def fetch_all_op_status_data():
-    """Master loader - combines all operational status data sources (cached once for 5 mins)."""
+    """Master loader - combines all operational status data sources."""
     # DBT data
     gmt_end_time = datetime.now(timezone.utc)
     gmt_start_time = datetime.now(timezone.utc) - timedelta(hours=24)

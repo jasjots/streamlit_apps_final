@@ -40,7 +40,6 @@ def convert_to_pst(epoch_time):
     pst_time = utc_time.astimezone (pst_timezone)
     return pst_time.strftime('%Y-%m-%d %H:%M:%S.%f')
 
-@st.cache_data(ttl=300, show_spinner=False)
 def mat_failed_df():
     query = """
     with cte_dbt_status as (
@@ -118,7 +117,6 @@ def mat_failed_df():
 
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
 def dbt_failed_jobs (param, time_input_start, time_input_end): 
     time_input_start=str(time_input_start).replace('+00:00','') 
     time_input_end=str(time_input_end).replace('+00:00','')
@@ -217,7 +215,6 @@ def dbt_failed_jobs (param, time_input_start, time_input_end):
     
     return final_merge_df
 
-@st.cache_data(ttl=300, show_spinner=False)
 def mat_running_run_and_queue():
     
     mat_session = session
@@ -287,7 +284,6 @@ def mat_running_run_and_queue():
     mat_data = pd.merge(mat_data, comments_df, on='TASK_HISTORY_ID', how='left') 
     return mat_data[mat_data['STATUS']=='FAILED']
 
-@st.cache_data(ttl=300, show_spinner=False)
 def failed_dbt_data():
     dbt_session = session
     query_failed = '''
@@ -335,9 +331,8 @@ def failed_dbt_data():
     final_fail_df = failed_df[columns_to_display]
     return final_fail_df
 
-@st.cache_data(ttl=300, show_spinner=False)
 def fetch_all_error_data():
-    """Cached loader - executes all SQL queries once, results cached for 5 mins."""
+    """Loader - executes all SQL queries to fetch latest error data."""
     gmt_end_time = datetime.now(timezone.utc)
     gmt_start_time = datetime.now(timezone.utc) - timedelta(hours=24)
     

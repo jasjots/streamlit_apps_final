@@ -28,11 +28,10 @@ load_css("CSS/monthly_job.css")
 from sidebar import render_sidebar
 render_sidebar()
 
-# Data loading functions with caching
+# Data loading functions
 
-@st.cache_data(ttl=300, show_spinner=False)
 def get_monthly_jobs_data():
-    """Cached query for monthly job statistics (DBT + Matillion)."""
+    """Query for monthly job statistics (DBT + Matillion)."""
     month_year_query = """
 SELECT
     rr.model_execution_id AS TASK_HISTORY_ID,
@@ -92,9 +91,8 @@ ORDER BY
     return session.sql(month_year_query).to_pandas()
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def get_monthly_trend_data():
-    """Cached query for longest running jobs per month."""
+    """Query for longest running jobs per month."""
     query_for_each_month = """
 WITH dbt_job_data AS (
     SELECT distinct
@@ -157,9 +155,8 @@ max_execution_time_minute DESC;
     return session.sql(query_for_each_month).to_pandas()
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def get_job_execution_stats():
-    """Cached query for job execution counts and average execution times."""
+    """Query for job execution counts and average execution times."""
     job_execution_count = """
 WITH dbt_job_data AS (
     SELECT
@@ -230,9 +227,8 @@ ORDER BY
     return session.sql(job_execution_count).to_pandas()
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def fetch_all_monthly_data():
-    """Master loader - combines all monthly data sources (cached once for 5 mins)."""
+    """Master loader - combines all monthly data sources."""
     monthly_df = get_monthly_jobs_data()
     longest = get_monthly_trend_data()
     job_count = get_job_execution_stats()

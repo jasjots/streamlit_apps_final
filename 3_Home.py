@@ -346,9 +346,8 @@ def mat_running_run_and_queue():
     # mat_data = pd.concat (mat_data, comments_df, on='TASK_HISTORY_ID', how='left')
     return mat_data
 
-@st.cache_data(ttl=300, show_spinner=False)
 def fetch_schedule_status_data():
-    """Cached loader for schedule status data only (heavy queries)."""
+    """Loader for schedule status data (fresh SQL on each reload)."""
     query = """
     with cte_dbt_status as (
         select listagg (distinct
@@ -502,9 +501,8 @@ def render_schedule_status_fragment():
     return df, run_df, queue_df, fail_df
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def fetch_jobs_status_data(df_input, run_df_input, queue_df_input, fail_df_input):
-    """Cached assembly of combined job dataframe."""
+    """Assembly of combined job dataframe (fresh on each reload)."""
     return df_input, run_df_input, queue_df_input, fail_df_input
 
 
@@ -621,9 +619,8 @@ def render_jobs_status_fragment(df, run_df, queue_df, fail_df):
     return df_combined
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def fetch_longest_execution_data(df_input):
-    """Cached assembly of success jobs data."""
+    """Assembly of success jobs data (fresh on each reload)."""
     return df_input[df_input["STATUS"] == "SUCCESS"].copy()
 
 
@@ -806,9 +803,8 @@ def jobs_status_data():
         # st.markdown("", unsafe_allow_html=True)
         
 
-@st.cache_data(ttl=300, show_spinner=False)
 def fetch_schedule_lag_data():
-    """Cached loader for schedule lag comparison data."""
+    """Loader for schedule lag comparison data (fresh on each reload)."""
     sch_lag_query='''
 
     SELECT
@@ -908,9 +904,8 @@ def schedule_lag_df():
         }
         st.dataframe(filter_sch, hide_index=True, column_config=column_config1, use_container_width=True)
         st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">',unsafe_allow_html=True)
-@st.cache_data(ttl=300, show_spinner=False)
 def fetch_long_run_data():
-    """Cached loader for long run comparison data."""
+    """Loader for long run comparison data (fresh on each reload)."""
     avg7_lag_query="""
          WITH ScheduleRunData AS (
             SELECT
@@ -1088,9 +1083,8 @@ def avg_schedule_lag():
         st.dataframe(avg7_schedule_df, column_config=column_config1, use_container_width=True, hide_index=True)
         st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">',unsafe_allow_html=True)
 
-@st.cache_data(ttl=300, show_spinner=False)
 def fetch_upcoming_idle_data():
-    """Cached loader for upcoming schedules and idle time data."""
+    """Loader for upcoming schedules and idle time data (fresh on each reload)."""
     up_sch='''
    WITH FlattenedSchedules AS (
         SELECT

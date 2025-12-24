@@ -36,7 +36,6 @@ def convert_to_pst(epoch_time):
     pst_time = utc_time.astimezone (pst_timezone)
     return pst_time.strftime('%Y-%m-%d %H:%M:%S.%f')
 
-@st.cache_data(ttl=300, show_spinner=False)
 def mat_running_run_and_queue():
 
     mat_session = session
@@ -94,7 +93,6 @@ def mat_running_run_and_queue():
     mat_data['SOURCE_TYPE']='MATILLION'
     return mat_data
 
-@st.cache_data(ttl=300, show_spinner=False)
 def dbt_failed_jobs (param, time_input_start, time_input_end):
 
     time_input_start=str(time_input_start).replace('+00:00','') 
@@ -178,7 +176,6 @@ def dbt_failed_jobs (param, time_input_start, time_input_end):
     return merged_df
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def create_history_data(from_date_time):
     #session = session()
     query =f"""
@@ -260,7 +257,6 @@ def create_history_data(from_date_time):
 
     return df
 
-@st.cache_data(ttl=300, show_spinner=False)
 def failed_dbt_data():
     dbt_session = session
     query_failed = '''
@@ -306,7 +302,6 @@ def failed_dbt_data():
     final_fail_df = failed_df[columns_to_display]
     return final_fail_df
 
-@st.cache_data(ttl=300, show_spinner=False)
 def history_job_data(from_date_time):
     #session = session()
     query =f"""
@@ -389,9 +384,8 @@ def history_job_data(from_date_time):
     return df
 
 
-@st.cache_data(ttl=300, show_spinner=False)
 def fetch_all_job_history_data():
-    """Cached loader - executes all SQL queries once, results cached for 5 mins."""
+    """Loader - executes all SQL queries to fetch latest job history data."""
     from_date_time = '2025-05-01'
     # Load all data sources
     history_df = create_history_data(from_date_time)
