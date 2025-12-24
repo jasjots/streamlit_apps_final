@@ -346,8 +346,10 @@ def mat_running_run_and_queue():
     # mat_data = pd.concat (mat_data, comments_df, on='TASK_HISTORY_ID', how='left')
     return mat_data
 
-def create_df_charts(): 
-    query ="""
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_schedule_status_data():
+    """Cached loader for schedule status data only (heavy queries)."""
+    query = """
     with cte_dbt_status as (
         select listagg (distinct
         CASE
@@ -438,55 +440,44 @@ def create_df_charts():
     ORDER BY
             cd.END_TIME DESC;
     """
-
-    task_query = """
-        SELECT distinct * FROM EDW_LAB_DEV.OBSERVABILITY.RUN_HISTORY_DETAILS;
-    """
-   # session = session
-
-    created_dataframe = session.sql(query) 
-    created_task_dataframe = session.sql(task_query)
-    df=created_dataframe.to_pandas() 
-    df_task = created_task_dataframe.to_pandas()
-    mat_api_df=mat_running_run_and_queue()
+    
+    created_dataframe = session.sql(query)
+    df = created_dataframe.to_pandas()
+    mat_api_df = mat_running_run_and_queue()
     df = pd.concat([df, mat_api_df], ignore_index=True)
-    # Calculate the number of successful and failed jobs in the left half
-    successful_jobs = df [df['STATUS'] == 'SUCCESS'].shape[0]
-    failed_jobs = df [df['STATUS']=='FAILED'].shape[0]
-    # st.write(df [df ['STATUS'].str.contains("FAILED | ERROR", case=False)])
-    cancelled_jobs = df [df['STATUS'] == 'CANCELLED'].shape[0]
-    run_count=df[(df['STATUS'] == 'RUNNING')].shape[0]
-    queue_count = df [(df['STATUS'] == 'QUEUED')].shape[0]
-
-     # Calculate the number of successful and failed jobs in the left half
-    successful_task_jobs = df_task [df_task['STATE'] == 'SUCCESS'].shape[0]
-    failed_task_jobs = df_task [df_task['STATE']=='FAILED'].shape[0]
-    # st.write(df [df ['STATUS'].str.contains("FAILED | ERROR", case=False)])
-    cancelled_task_jobs = df_task [df_task['STATE'] == 'CANCELLED'].shape[0]
-    run_task_count=df_task[(df_task['STATE'] == 'RUNNING')].shape[0]
-    queue_task_count = df_task [(df_task['STATE'] == 'QUEUED')].shape[0]
-    color_mapping = {
-        'SUCCESS': '#16A34A', # Blue
-        'FAILED': '#DC2626', # Red
-        'CANCELLED': '#feb746', # orange
-        'RUNNING': '#2563EB',# green
-        'QUEUE': '#F59E0B'
-    }
-    running_jobs, run_df=dbt_running_run_and_queue(3)
-    queued_jobs, queue_df=dbt_running_run_and_queue (1)
-
-    local_time = time.localtime()
+    
+    successful_jobs = df[df['STATUS'] == 'SUCCESS'].shape[0]
+    failed_jobs = df[df['STATUS'] == 'FAILED'].shape[0]
+    cancelled_jobs = df[df['STATUS'] == 'CANCELLED'].shape[0]
+    run_count = df[df['STATUS'] == 'RUNNING'].shape[0]
+    queue_count = df[df['STATUS'] == 'QUEUED'].shape[0]
+    
+    running_jobs, run_df = dbt_running_run_and_queue(3)
+    queued_jobs, queue_df = dbt_running_run_and_queue(1)
+    
     gmt_end_time = datetime.now(timezone.utc)
     gmt_start_time = datetime.now(timezone.utc) - timedelta(hours=24)
+    failed_jobs_dbt, fail_df = dbt_failed_jobs(20, gmt_start_time, gmt_end_time)
+    
+    running_jobs += run_count
+    queued_jobs += queue_count
+    failed_jobs += failed_jobs_dbt
+    
+    return df, run_df, queue_df, fail_df, successful_jobs, failed_jobs, cancelled_jobs, running_jobs, queued_jobs
 
-    failed_jobs_dbt, fail_df= dbt_failed_jobs (20, gmt_start_time, gmt_end_time)
-    # st.dataframe (fail_df) 
-    running_jobs+=run_count 
-    queued_jobs+=queue_count 
-    failed_jobs+=failed_jobs_dbt
 
+@st.fragment
+def render_schedule_status_fragment():
+    """Fragment: Schedule Status Overview - uses cached data, no filters."""
+    # Load cached data once
+    if 'schedule_status_data' not in st.session_state:
+        with st.spinner('Loading schedule status...'):
+            st.session_state['schedule_status_data'] = fetch_schedule_status_data()
+    
+    cached = st.session_state['schedule_status_data']
+    df, run_df, queue_df, fail_df, successful_jobs, failed_jobs, cancelled_jobs, running_jobs, queued_jobs = cached
+    
     with st.container(border=False):
-        # header_col1,divider, header_col2 = st.columns([1,0.05, 1])
         st.markdown(
             f"""
         <div class="dashboard-box">
@@ -506,41 +497,33 @@ def create_df_charts():
         """,
             unsafe_allow_html=True,
         )
-
-        # with st.container(border=False):
-        #     # header_col1,divider, header_col2 = st.columns([1,0.05, 1])
-        #     st.markdown(f"""
-        #     <div class="dashboard-box">
-        #          <div>
-        #              <h1 style="color:Black;font-family:'Inter', sans-serif; font-size: 20px; margin: auto; text-align: center;">
-        #                  Jobs Status Overview (24hrs)
-        #              </h1>
-        #         </div>
-        #         <div style="display:flex; flex-wrap:wrap;">
-        #              <div class="status-card"><p>Success</p><h2>{successful_task_jobs}</h2></div>
-        #              <div class="status-card"><p>Failed</p><h2>{failed_task_jobs}</h2></div>
-        #              <div class="status-card"><p>Cancelled</p><h2>{cancelled_task_jobs}</h2></div>
-        #              <div class="status-card"><p>Running</p><h2>{run_task_count}</h2></div>
-        #              <div class="status-card"><p>Queue</p><h2>{queue_task_count}</h2></div>
-        #         </div>
-        #     </div>
-        #     """, unsafe_allow_html=True)
-
         st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">',unsafe_allow_html=True)
+    
+    return df, run_df, queue_df, fail_df
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_jobs_status_data(df_input, run_df_input, queue_df_input, fail_df_input):
+    """Cached assembly of combined job dataframe."""
+    return df_input, run_df_input, queue_df_input, fail_df_input
+
+
+@st.fragment
+def render_jobs_status_fragment(df, run_df, queue_df, fail_df):
+    """Fragment: Jobs Status with session_state filters - only filtered table re-renders on change."""
+    # Initialize session state for filters
+    if 'jobs_filters' not in st.session_state:
+        st.session_state['jobs_filters'] = {
+            'schedule': 'ALL',
+            'source_type': 'ALL',
+            'status': 'ALL',
+        }
+    
     schedules_options = ["ALL"] + list(df["SCHEDULE_NAME"].unique())
     source_type_options = ["ALL"] + list(df["SOURCE_TYPE"].unique())
-    status_options = [
-        "ALL",
-        "SUCCESS",
-        "FAILED",
-        "CANCELLED",
-        "RUNNING",
-        "QUEUED",
-    ]  # + [status for status in df['STATUS'].unique() if status != 'ERROR']
+    status_options = ["ALL","SUCCESS","FAILED","CANCELLED","RUNNING","QUEUED"]
+    
     with st.container(border=False):
-
         st.markdown(
             """
             <div>
@@ -554,208 +537,103 @@ def create_df_charts():
             """,
             unsafe_allow_html=True,
         )
-
         
+        # Callback for filter changes
+        def _update_jobs_filters():
+            st.session_state['jobs_filters'] = {
+                'schedule': 'ALL' if st.session_state.get('jobs_schedule_sel') == 'Schedule' else st.session_state.get('jobs_schedule_sel', 'ALL'),
+                'source_type': 'ALL' if st.session_state.get('jobs_source_sel') == 'Source Type' else st.session_state.get('jobs_source_sel', 'ALL'),
+                'status': 'ALL' if st.session_state.get('jobs_status_sel') == 'Status' else st.session_state.get('jobs_status_sel', 'ALL'),
+            }
 
         filter_col1, filter_col2 = st.columns([2, 2])
 
         with filter_col1:
             f1, f2, f3 = st.columns(3)
             with f1:
-                schedules_options_placeholder = ["Schedule"] + schedules_options[1:]  # assuming schedules_options[0] is 'ALL'
-                schedule_filter = st.selectbox("", options=schedules_options_placeholder, index=0
-                )
+                schedules_options_placeholder = ["Schedule"] + schedules_options[1:]
+                st.selectbox("", options=schedules_options_placeholder, index=0, key='jobs_schedule_sel', on_change=_update_jobs_filters)
             with f2:
                 source_type_options_placeholder = ["Source Type"] + source_type_options[1:]
-                source_type_filter = st.selectbox("", options=source_type_options_placeholder, index=0
-                )
+                st.selectbox("", options=source_type_options_placeholder, index=0, key='jobs_source_sel', on_change=_update_jobs_filters)
             with f3:
                 status_options_placeholder = ["Status"] + status_options[1:]
-                status_filter = st.selectbox("", options=status_options_placeholder, index=0
-                )
+                st.selectbox("", options=status_options_placeholder, index=0, key='jobs_status_sel', on_change=_update_jobs_filters)
 
-        
+        # Use filters from session state
+        schedule_filter_val = st.session_state['jobs_filters']['schedule']
+        source_type_filter_val = st.session_state['jobs_filters']['source_type']
+        status_filter_val = st.session_state['jobs_filters']['status']
 
-        # insert RUNNING AND QUEUE
-        columns_to_insert = [
-            "PROJECT_NAME",
-            "SCHEDULE_NAME",
-            "START_TIME",
-            "END_TIME",
-            "ERROR_MESSAGE",
-            "STATUS",
-            "SOURCE_TYPE",
-            "LINKS",
-            "JOB_TAG_NAME",
-            "TRIGGER_BY",
-            "TASK_HISTORY_ID",
-        ]
-        # fail_col_to_insert = ['PROJECT_NAME', 'SCHEDULE_NAME', 'START_TIME', 'END_TIME', 'TOTAL RUNTIME MINUTES', 'ERROR_MESSAGE', 'STATUS', 'SOURCE_TYPE', 'LINKS', 'JOB_TAG_NAME', 'TRIGGER_BY', 'TASK_HISTORY_ID', 'REVIEWED','REVIEWER_NAME','COMMENTS']
-        fail_col_to_insert = columns_to_insert + [
-            "REVIEWED",
-            "REVIEWER_NAME",
-            "COMMENTS",
-        ]
+        columns_to_insert = ["PROJECT_NAME","SCHEDULE_NAME","START_TIME","END_TIME","ERROR_MESSAGE","STATUS","SOURCE_TYPE","LINKS","JOB_TAG_NAME","TRIGGER_BY","TASK_HISTORY_ID"]
+        fail_col_to_insert = columns_to_insert + ["REVIEWED","REVIEWER_NAME","COMMENTS"]
 
         filtered_merged_df = run_df[columns_to_insert]
         filtered_queue_df = queue_df[columns_to_insert]
         final_fail_df = fail_df[fail_col_to_insert]
+        concatenated_df_temp = pd.concat([filtered_merged_df, filtered_queue_df], ignore_index=True)
+        concatenated_df = pd.concat([final_fail_df, concatenated_df_temp], ignore_index=True)
 
-        concatenated_df_temp = pd.concat(
-            [filtered_merged_df, filtered_queue_df], ignore_index=True
-        )
-        concatenated_df = pd.concat(
-            [final_fail_df, concatenated_df_temp], ignore_index=True
-        )
+        df_combined = pd.concat([df, concatenated_df], ignore_index=True)
+        df_combined.loc[df_combined["STATUS"].str.contains("FAILEDIERROR", case=False), "STATUS"] = "FAILED"
+        df_combined["LINKS"] = df_combined.apply(lambda row: f"https://matillion-prod.corp.zscaler.com/#ZSCALER_BI/ZSCALER_BI_DWH/default/{row['SCHEDULE_NAME']}/run/{row['TASK_HISTORY_ID']}" if row["SOURCE_TYPE"] == "MATILLION" else row["LINKS"], axis=1)
 
-        df = pd.concat([df, concatenated_df], ignore_index=True)
-
-        df.loc[
-            df["STATUS"].str.contains("FAILEDIERROR", case=False), "STATUS"
-        ] = "FAILED"
-        # st.dataframe(df)
-
-        df["LINKS"] = df.apply(
-            lambda row: f"https://matillion-prod.corp.zscaler.com/#ZSCALER_BI/ZSCALER_BI_DWH/default/{row['SCHEDULE_NAME']}/run/{row['TASK_HISTORY_ID']}"
-            if row["SOURCE_TYPE"] == "MATILLION"
-            else row["LINKS"],
-            axis=1,
-        )
-
-        schedule_filter_val = (
-            "ALL" if schedule_filter == "Schedule" else schedule_filter
-        )
-        source_type_filter_val = (
-            "ALL" if source_type_filter == "Source Type" else source_type_filter
-        )
-        status_filter_val = (
-            "ALL" if status_filter == "Status" else status_filter
-        )
-
-  
+        # Apply filters locally (no SQL re-execution)
         if status_filter_val == "FAILED":
-            df_filtered = df[
-                ((df["SOURCE_TYPE"] == source_type_filter_val)| (source_type_filter_val == "ALL"))
-                & ((df["SCHEDULE_NAME"] == schedule_filter_val)| (schedule_filter_val == "ALL"))
-                & ((df["STATUS"] == "FAILED")|(status_filter_val == "ALL"))
-            ]
+            df_filtered = df_combined[((df_combined["SOURCE_TYPE"] == source_type_filter_val)| (source_type_filter_val == "ALL")) & ((df_combined["SCHEDULE_NAME"] == schedule_filter_val)| (schedule_filter_val == "ALL")) & ((df_combined["STATUS"] == "FAILED")|(status_filter_val == "ALL"))]
         else:
-            df_filtered = df[
-                ((df["SOURCE_TYPE"] == source_type_filter_val) | (source_type_filter_val == "ALL"))
-                & ((df["SCHEDULE_NAME"] == schedule_filter_val) | (schedule_filter_val == "ALL"))
-                & ((df["STATUS"] == status_filter_val) | (status_filter_val == "ALL"))
-            ]
+            df_filtered = df_combined[((df_combined["SOURCE_TYPE"] == source_type_filter_val) | (source_type_filter_val == "ALL")) & ((df_combined["SCHEDULE_NAME"] == schedule_filter_val) | (schedule_filter_val == "ALL")) & ((df_combined["STATUS"] == status_filter_val) | (status_filter_val == "ALL"))]
 
-        df_filtered["START_TIME"] = pd.to_datetime(df_filtered["START_TIME"])
-        df_filtered["START_TIME"] = df_filtered["START_TIME"].dt.strftime(
-            "%B %d, %Y at %I:%M %p"
-        )
-        df_filtered["END_TIME"] = pd.to_datetime(df_filtered["END_TIME"])
-        df_filtered["END_TIME"] = df_filtered["END_TIME"].dt.strftime(
-            "%B %d, %Y at %I:%M %p"
-        )
-        # df_filtered = df_filtered.sort_values (by= 'START_TIME', ascending=False)
+        df_filtered = df_filtered.copy()
+        df_filtered["START_TIME"] = pd.to_datetime(df_filtered["START_TIME"]).dt.strftime("%B %d, %Y at %I:%M %p")
+        df_filtered["END_TIME"] = pd.to_datetime(df_filtered["END_TIME"]).dt.strftime("%B %d, %Y at %I:%M %p")
 
         column_config1 = {
-            "PROJECT_NAME": st.column_config.Column(
-                " PROJECT", help="PROJECT NAME", width="medium"
-            ),
-            "SCHEDULE_NAME": st.column_config.Column(
-                " SCHEDULE", help="SCHEDULE NAME", width="medium"
-            ),
-            "JOB_TAG_NAME": st.column_config.Column(
-                " JOB/TAG ", help="JOB/TAG NAME", width="medium"
-            ),
-            "START_TIME": st.column_config.Column(
-                " START TIME (PST)", help="START TIME (PST)", width="medium"
-            ),
-            "END_TIME": st.column_config.Column(
-                " END TIME (PST)", help="END TIME (PST)", width="medium"
-            ),
-            "ERROR_MESSAGE": st.column_config.Column(
-                " ERROR MESSAGE", help="ERROR MESSAGE", width="medium"
-            ),
-            "TOTAL_RUNTIME_MINUTES": st.column_config.Column(
-                " TOTAL RUNTIME (MIN)", help="TOTAL RUNTIME (MINS)", width="medium"
-            ),
-            "TASK_HISTORY_ID": st.column_config.Column(
-                " TASK HISTORY ID", help="TASK HISTORY ID", width="medium"
-            ),
-            "TRIGGER_BY": st.column_config.Column(
-                " TRIGGERED BY", help="TRIGGER BY", width="medium"
-            ),
-            "SOURCE_TYPE": st.column_config.Column(
-                " SOURCE TYPE", help="SOURCE TYPE", width="medium"
-            ),
-            "LINKS": st.column_config.LinkColumn(
-                " LINKS",
-                help="LINKS",
-                width="medium",
-            ),
-            "REVIEWER_NAME": st.column_config.Column(
-                " REVIEWER ",
-                help="REVIEWER NAME",
-                width="medium",
-            ),
+            "PROJECT_NAME": st.column_config.Column(" PROJECT", help="PROJECT NAME", width="medium"),
+            "SCHEDULE_NAME": st.column_config.Column(" SCHEDULE", help="SCHEDULE NAME", width="medium"),
+            "JOB_TAG_NAME": st.column_config.Column(" JOB/TAG ", help="JOB/TAG NAME", width="medium"),
+            "START_TIME": st.column_config.Column(" START TIME (PST)", help="START TIME (PST)", width="medium"),
+            "END_TIME": st.column_config.Column(" END TIME (PST)", help="END TIME (PST)", width="medium"),
+            "ERROR_MESSAGE": st.column_config.Column(" ERROR MESSAGE", help="ERROR MESSAGE", width="medium"),
+            "TOTAL_RUNTIME_MINUTES": st.column_config.Column(" TOTAL RUNTIME (MIN)", help="TOTAL RUNTIME (MINS)", width="medium"),
+            "TASK_HISTORY_ID": st.column_config.Column(" TASK HISTORY ID", help="TASK HISTORY ID", width="medium"),
+            "TRIGGER_BY": st.column_config.Column(" TRIGGERED BY", help="TRIGGER BY", width="medium"),
+            "SOURCE_TYPE": st.column_config.Column(" SOURCE TYPE", help="SOURCE TYPE", width="medium"),
+            "LINKS": st.column_config.LinkColumn(" LINKS", help="LINKS", width="medium"),
+            "REVIEWER_NAME": st.column_config.Column(" REVIEWER ", help="REVIEWER NAME", width="medium"),
         }
 
         def color_status(val):
-            color_map = {
-                "SUCCESS": "#5b85fb",
-                "FAILED": "#f26271",
-                "CANCELLED": "#feb746",
-                "RUNNING": "#61d7a1",
-                "QUEUED": "#fee8c6",
-            }
+            color_map = {"SUCCESS": "#5b85fb","FAILED": "#f26271","CANCELLED": "#feb746","RUNNING": "#61d7a1","QUEUED": "#fee8c6"}
             return f'background-color: {color_map.get(val, "white")}; font-weight:bold; border-radius: 5px; font-family: Inter, sans-serif;'
 
         if "TOTAL_RUNTIME_MINUTES" in df_filtered.columns:
-            df_filtered["TOTAL_RUNTIME_MINUTES"] = (
-                df_filtered["TOTAL_RUNTIME_MINUTES"].astype(float).fillna(0).astype(int)
-            )
+            df_filtered["TOTAL_RUNTIME_MINUTES"] = df_filtered["TOTAL_RUNTIME_MINUTES"].astype(float).fillna(0).astype(int)
 
-            
+        df_styled = df_filtered.style.applymap(color_status, subset=["STATUS"]).set_table_styles([
+            {"selector": "th","props": [("background-color", "#7fcbf0"),("color", "#000"),("font-size", "12px"),("font-family", "Inter, sans-serif"),("text-align", "center"),],},
+            {"selector": "td","props": [("background-color", "#7fcbf0"),("font-family", "Inter, sans-serif"),("font-size", "13px"),("color", "#000"),],},
+        ])
 
-        # === Style for Table ===
-        # df_styled = df_filtered.style.applymap(color_status, subset=['STATUS'])
-        df_styled = df_filtered.style.applymap(
-            color_status, subset=["STATUS"]
-        ).set_table_styles(
-            [
-                {
-                    "selector": "th",
-                    "props": [
-                        ("background-color", "#7fcbf0"),  # Dark blue-gray header
-                        ("color", "#000"),
-                        ("font-size", "12px"),
-                        ("font-family", "Inter, sans-serif"),
-                        # ("font-weight", "bold"),
-                        ("text-align", "center"),
-                    ],
-                },
-                {
-                    "selector": "td",
-                    "props": [
-                        ("background-color", "#7fcbf0"),
-                        ("font-family", "Inter, sans-serif"),
-                        ("font-size", "13px"),
-                        ("color", "#000"),
-                    ],
-                },
-            ]
-        )
-
-        st.dataframe(
-            df_styled,
-            column_config=column_config1,
-            use_container_width=True,
-            hide_index=True,
-        )
-
+        st.dataframe(df_styled, column_config=column_config1, use_container_width=True, hide_index=True)
         st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">',unsafe_allow_html=True)
-        # edited_df = st.data_editor (df_filtered, column_config = column_config1,key= 'TASK_HISTORY_ID', use_container_width=True, hide_index=True)
     
-    
+    return df_combined
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_longest_execution_data(df_input):
+    """Cached assembly of success jobs data."""
+    return df_input[df_input["STATUS"] == "SUCCESS"].copy()
+
+
+@st.fragment
+def render_longest_execution_fragment(df):
+    """Fragment: Longest Execution Time Jobs - uses session_state for top_n filter."""
+    # Initialize session state for filter
+    if 'longest_exec_top_n' not in st.session_state:
+        st.session_state['longest_exec_top_n'] = 5
+
     with st.container(border=False):
         st.markdown(
             """
@@ -770,6 +648,11 @@ def create_df_charts():
             """,
             unsafe_allow_html=True,
         )
+        
+        # Callback for top_n changes
+        def _update_longest_exec():
+            st.session_state['longest_exec_top_n'] = st.session_state.get('longest_exec_sel', 5)
+        
         df_success = df[df["STATUS"] == "SUCCESS"].copy()
         df_success["TOTAL_RUNTIME_MINUTES"] = pd.to_numeric(df_success["TOTAL_RUNTIME_MINUTES"], errors="coerce")
 
@@ -778,68 +661,33 @@ def create_df_charts():
             top_n = st.selectbox(
                 "Select number of top jobs to display",
                 options=[1, 5, 10, 15, 20, 25, 30, 40, 50],
-                index=1
+                index=1,
+                key='longest_exec_sel',
+                on_change=_update_longest_exec
             )
 
-        top_runs = df_success.sort_values("TOTAL_RUNTIME_MINUTES", ascending=False).head(top_n).copy()
+        # Use filter from session state (re-render with new top_n)
+        top_n_val = st.session_state.get('longest_exec_top_n', 5)
+        top_runs = df_success.sort_values("TOTAL_RUNTIME_MINUTES", ascending=False).head(top_n_val).copy()
         top_runs["RANK"] = range(1, len(top_runs) + 1)
-        top_runs["LABEL"] = (
-            top_runs["RANK"].astype(str) + ". " +
-            top_runs["SCHEDULE_NAME"].astype(str).str.slice(0, 25) + "..."
-        )
+        top_runs["LABEL"] = top_runs["RANK"].astype(str) + ". " + top_runs["SCHEDULE_NAME"].astype(str).str.slice(0, 25) + "..."
 
-        # ------------ VERTICAL BAR CHART ------------------
-        fig = px.bar(
-            top_runs,
-            x="LABEL",
-            y="TOTAL_RUNTIME_MINUTES",
-            color="SOURCE_TYPE",
-            text="TOTAL_RUNTIME_MINUTES",
-            hover_data={
-                "RANK": True,
-                "SCHEDULE_NAME": True,
-                "JOB_TAG_NAME": True,
-                "SOURCE_TYPE": True,
-                "TOTAL_RUNTIME_MINUTES": ":.2f",
-            },
-        )
-
-        fig.update_traces(
-            textposition="outside",
-            texttemplate="%{text:.2f} min",
-            marker_line=dict(width=1.2, color="darkgrey"),
-            hovertemplate="<b>Rank:</b> %{customdata[0]}<br>" +
-                        "<b>Schedule:</b> %{customdata[1]}<br>" +
-                        "<b>Source:</b> %{customdata[3]}<br>" +
-                        "<b>Job/Tag:</b> %{customdata[2]}<br>" +
-                        "<b>Runtime:</b> %{y:.2f} min<br>" +
-                        "<extra></extra>"
-        )
-
-        fig.update_layout(
-            hovermode="x unified",
-            hoverlabel=dict(
-                bgcolor="white",
-                font_size=12,
-                font_family="'Inter', sans-serif"
-            ),
-            
-            margin=dict(l=40, r=40, t=70, b=200),
-            xaxis_title="Job Runs",
-            yaxis_title="Runtime (Minutes)",
-            xaxis=dict(
-                tickangle=45,
-                tickfont=dict(size=10, color="Black"),
-            ),
-            plot_bgcolor="rgba(245,246,250,1)",
-            paper_bgcolor="rgba(245,246,250,1)",
-            bargap=0.3,
-        )
+        fig = px.bar(top_runs, x="LABEL", y="TOTAL_RUNTIME_MINUTES", color="SOURCE_TYPE", text="TOTAL_RUNTIME_MINUTES",
+                     hover_data={"RANK": True, "SCHEDULE_NAME": True, "JOB_TAG_NAME": True, "SOURCE_TYPE": True, "TOTAL_RUNTIME_MINUTES": ":.2f",},)
+        fig.update_traces(textposition="outside", texttemplate="%{text:.2f} min", marker_line=dict(width=1.2, color="darkgrey"), hovertemplate="<b>Rank:</b> %{customdata[0]}<br><b>Schedule:</b> %{customdata[1]}<br><b>Source:</b> %{customdata[3]}<br><b>Job/Tag:</b> %{customdata[2]}<br><b>Runtime:</b> %{y:.2f} min<br><extra></extra>")
+        fig.update_layout(hovermode="x unified", hoverlabel=dict(bgcolor="white", font_size=12, font_family="'Inter', sans-serif"), margin=dict(l=40, r=40, t=70, b=200), xaxis_title="Job Runs", yaxis_title="Runtime (Minutes)", xaxis=dict(tickangle=45, tickfont=dict(size=10, color="Black"),), plot_bgcolor="rgba(245,246,250,1)", paper_bgcolor="rgba(245,246,250,1)", bargap=0.3,)
 
         st.plotly_chart(fig, use_container_width=True)
+        st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">', unsafe_allow_html=True)
 
-        st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">', 
-                    unsafe_allow_html=True)
+
+def create_df_charts():
+
+
+    # Call the three independent fragments
+    df, run_df, queue_df, fail_df = render_schedule_status_fragment()
+    df = render_jobs_status_fragment(df, run_df, queue_df, fail_df)
+    render_longest_execution_fragment(df)
 
 
 def jobs_status_data():
@@ -958,8 +806,9 @@ def jobs_status_data():
         # st.markdown("", unsafe_allow_html=True)
         
 
-def schedule_lag_df():
-    #session = session
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_schedule_lag_data():
+    """Cached loader for schedule lag comparison data."""
     sch_lag_query='''
 
     SELECT
@@ -1008,8 +857,23 @@ def schedule_lag_df():
         PROJECT_NAME, ACTUAL_START_TIME DESC;
     '''
 
-    schedule_df =session.sql(sch_lag_query) 
-    schedule_df=schedule_df.to_pandas()
+    return session.sql(sch_lag_query).to_pandas()
+
+
+@st.fragment
+def schedule_lag_df():
+    """Fragment: Schedule Lag Comparison - uses session_state for source_type filter."""
+    # Initialize session state for filter
+    if 'lag_source_type' not in st.session_state:
+        st.session_state['lag_source_type'] = 'ALL'
+    
+    # Load cached data once
+    if 'schedule_lag_data' not in st.session_state:
+        with st.spinner('Loading schedule lag data...'):
+            st.session_state['schedule_lag_data'] = fetch_schedule_lag_data()
+    
+    schedule_df = st.session_state['schedule_lag_data']
+    
     with st.container(border=False):
         st.markdown(
             """
@@ -1019,56 +883,34 @@ def schedule_lag_df():
             """,
             unsafe_allow_html=True,
         )
+        
+        # Callback for filter changes
+        def _update_lag_filter():
+            st.session_state['lag_source_type'] = st.session_state.get('lag_source_sel', 'ALL')
+        
         filter_col1, filter_col2 = st.columns([2, 2])
         with filter_col1:
             source_type_filter = st.selectbox(
-                "Source Type", ["ALL", "Matillion", "DBT"]
+                "Source Type", ["ALL", "Matillion", "DBT"], key='lag_source_sel', on_change=_update_lag_filter
             )
 
-        # Filter the DataFrame based on selected Source Type
-        filter_sch = schedule_df[
-            (
-                (schedule_df["SOURCE_TYPE"] == source_type_filter)
-                | (source_type_filter == "ALL")
-            )
-        ]
-        # Display the filtered DataFrame below the bar chart
-        column_config1 = {
-            "SCHEDULE_NAME": st.column_config.Column(
-                "SCHEDULE NAME", help="SCHEDULE NAME", width="medium"
-            ),
-            "EXPECTED_START_TIME": st.column_config.Column(
-                "EXPECTED START TIME (PST)",
-                help="EXPECTED START TIME (PST)",
-                width="medium",
-            ),
-            "ACTUAL_START_TIME": st.column_config.Column(
-                "ACTUAL START TIME (PST)",
-                help="ACTUAL START TIME (PST)",
-                width="medium",
-            ),
-            "LAG_TIME_MINUTES": st.column_config.Column(
-                "LAG TIME MINUTES", help="LAG TIME MINUTES", width="medium"
-            ),
-            "SOURCE_TYPE": st.column_config.Column(
-                "SOURCE TYPE", help="SOURCE TYPE", width="medium"
-            ),
-            "PROJECT_NAME": st.column_config.Column(
-                "PROJECT NAME", help="PROJECT NAME", width="medium"
-            ),
-        }
-        st.dataframe(
-            filter_sch,
-            hide_index=True,
-            column_config=column_config1,
-            use_container_width=True,
-        )
-
-        st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">',unsafe_allow_html=True)
-        # st.markdown("", unsafe_allow_html=True)
+        # Use filter from session state (apply locally)
+        source_type_val = st.session_state.get('lag_source_type', 'ALL')
+        filter_sch = schedule_df[(schedule_df["SOURCE_TYPE"] == source_type_val) | (source_type_val == "ALL")]
         
-def avg_schedule_lag():
-    #session = session
+        column_config1 = {
+            "SCHEDULE_NAME": st.column_config.Column("SCHEDULE NAME", help="SCHEDULE NAME", width="medium"),
+            "EXPECTED_START_TIME": st.column_config.Column("EXPECTED START TIME (PST)", help="EXPECTED START TIME (PST)", width="medium"),
+            "ACTUAL_START_TIME": st.column_config.Column("ACTUAL START TIME (PST)", help="ACTUAL START TIME (PST)", width="medium"),
+            "LAG_TIME_MINUTES": st.column_config.Column("LAG TIME MINUTES", help="LAG TIME MINUTES", width="medium"),
+            "SOURCE_TYPE": st.column_config.Column("SOURCE TYPE", help="SOURCE TYPE", width="medium"),
+            "PROJECT_NAME": st.column_config.Column("PROJECT NAME", help="PROJECT NAME", width="medium"),
+        }
+        st.dataframe(filter_sch, hide_index=True, column_config=column_config1, use_container_width=True)
+        st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">',unsafe_allow_html=True)
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_long_run_data():
+    """Cached loader for long run comparison data."""
     avg7_lag_query="""
          WITH ScheduleRunData AS (
             SELECT
@@ -1201,8 +1043,18 @@ def avg_schedule_lag():
     ORDER BY
         PROJECT_NAME, SCHEDULE_NAME;
     """
-    avg7_schedule_df = session.sql(avg7_lag_query) 
-    avg7_schedule_df= avg7_schedule_df.to_pandas ()
+    return session.sql(avg7_lag_query).to_pandas()
+
+
+@st.fragment
+def avg_schedule_lag():
+    """Fragment: Long Run Comparison - no filters, cached data."""
+    # Load cached data once
+    if 'long_run_data' not in st.session_state:
+        with st.spinner('Loading long run comparison data...'):
+            st.session_state['long_run_data'] = fetch_long_run_data()
+    
+    avg7_schedule_df = st.session_state['long_run_data']
 
     with st.container(border=False):
         st.markdown(
@@ -1225,37 +1077,20 @@ def avg_schedule_lag():
                 unsafe_allow_html=True,
             )
 
-    column_config1 = {
-        "SCHEDULE_NAME": st.column_config.Column(
-            "SCHEDULE NAME", help="SCHEDULE NAME", width="medium"
-        ),
-        "AVG_LAST_7_RUNS_MINUTES": st.column_config.Column(
-            "AVG LAST 7 RUNS MINUTES", help="AVG LAST 7 RUNS MINUTES", width="medium"
-        ),
-        "LATEST_RUN_MINUTES": st.column_config.Column(
-            "LATEST RUN MINUTES", help="LATEST RUN MINUTES", width="medium"
-        ),
-        "TIME_DIFFERENCE_MINUTES": st.column_config.Column(
-            "TIME DIFFERENCE MINUTES", help="TIME DIFFERENCE MINUTES", width="medium"
-        ),
-        "SOURCE_TYPE": st.column_config.Column(
-            "SOURCE TYPE", help="SOURCE TYPE", width="medium"
-        ),
-        "PROJECT_NAME": st.column_config.Column(
-            "PROJECT NAME", help="PROJECT NAME", width="medium"
-        ),
-    }
-    st.dataframe(
-        avg7_schedule_df,
-        column_config=column_config1,
-        use_container_width=True,
-        hide_index=True,
-    )
+        column_config1 = {
+            "SCHEDULE_NAME": st.column_config.Column("SCHEDULE NAME", help="SCHEDULE NAME", width="medium"),
+            "AVG_LAST_7_RUNS_MINUTES": st.column_config.Column("AVG LAST 7 RUNS MINUTES", help="AVG LAST 7 RUNS MINUTES", width="medium"),
+            "LATEST_RUN_MINUTES": st.column_config.Column("LATEST RUN MINUTES", help="LATEST RUN MINUTES", width="medium"),
+            "TIME_DIFFERENCE_MINUTES": st.column_config.Column("TIME DIFFERENCE MINUTES", help="TIME DIFFERENCE MINUTES", width="medium"),
+            "SOURCE_TYPE": st.column_config.Column("SOURCE TYPE", help="SOURCE TYPE", width="medium"),
+            "PROJECT_NAME": st.column_config.Column("PROJECT NAME", help="PROJECT NAME", width="medium"),
+        }
+        st.dataframe(avg7_schedule_df, column_config=column_config1, use_container_width=True, hide_index=True)
+        st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">',unsafe_allow_html=True)
 
-    st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">',unsafe_allow_html=True)
-def upcoming_sch_idle_time():
-    #session= session
-
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_upcoming_idle_data():
+    """Cached loader for upcoming schedules and idle time data."""
     up_sch='''
    WITH FlattenedSchedules AS (
         SELECT
@@ -1298,8 +1133,45 @@ def upcoming_sch_idle_time():
     ORDER by start_run_time asc;
     '''
 
-    upcoming_schedules_df=session.sql(up_sch)
-    upcoming_schedules_df=upcoming_schedules_df.to_pandas()
+    idle_query='''
+        SELECT
+            Last_end_time AS FROM_DATETIME, 
+            next_start_time AS TO_DATETIME,
+            --idle_seconds 60 AS idle_minutes
+        FROM
+            (
+                SELECT
+                    END_TIME_PST AS last_end_time,
+                    LEAD (END_TIME_PST) OVER (ORDER BY END_TIME_PST) AS next_start_time,
+                    TIMESTAMPDIFF('second', END_TIME_PST, LEAD (END_TIME_PST) OVER (ORDER BY END_TIME_PST)) AS idle_seconds
+                FROM
+                    EDW_LAB_DEV.OBSERVABILITY.RUN_HISTORY_SUMMARY
+                WHERE
+                    END_TIME_PST >= CONVERT_TIMEZONE('UTC', 'America/Los_Angeles', CURRENT_TIMESTAMP) - INTERVAL '1 day' 
+                    AND STATE = 'SUCCESS'
+            ) AS idle_time
+        WHERE
+            idle_seconds / 60 >= 6
+            AND next_start_time >= DATEADD (hour, -24, CURRENT_TIMESTAMP)
+        ORDER BY
+            Last_end_time DESC;
+        '''
+    
+    upcoming_schedules_df = session.sql(up_sch).to_pandas()
+    idle_df = session.sql(idle_query).to_pandas()
+    
+    return upcoming_schedules_df, idle_df
+
+
+@st.fragment
+def upcoming_sch_idle_time():
+    """Fragment: Upcoming Schedules & Matillion Idle Time - cached data, no filters."""
+    # Load cached data once
+    if 'upcoming_idle_data' not in st.session_state:
+        with st.spinner('Loading upcoming schedules and idle time...'):
+            st.session_state['upcoming_idle_data'] = fetch_upcoming_idle_data()
+    
+    upcoming_schedules_df, idle_df = st.session_state['upcoming_idle_data']
 
     with st.container(border=False):
         st.markdown(
@@ -1330,32 +1202,7 @@ def upcoming_sch_idle_time():
             hide_index=True,
         )
 
-    idle_query='''
-        SELECT
-            Last_end_time AS FROM_DATETIME, 
-            next_start_time AS TO_DATETIME,
-            --idle_seconds 60 AS idle_minutes
-        FROM
-            (
-                SELECT
-                    END_TIME_PST AS last_end_time,
-                    LEAD (END_TIME_PST) OVER (ORDER BY END_TIME_PST) AS next_start_time,
-                    TIMESTAMPDIFF('second', END_TIME_PST, LEAD (END_TIME_PST) OVER (ORDER BY END_TIME_PST)) AS idle_seconds
-                FROM
-                    EDW_LAB_DEV.OBSERVABILITY.RUN_HISTORY_SUMMARY
-                WHERE
-                    END_TIME_PST >= CONVERT_TIMEZONE('UTC', 'America/Los_Angeles', CURRENT_TIMESTAMP) - INTERVAL '1 day' 
-                    AND STATE = 'SUCCESS'
-            ) AS idle_time
-        WHERE
-            idle_seconds / 60 >= 6
-            AND next_start_time >= DATEADD (hour, -24, CURRENT_TIMESTAMP)
-        ORDER BY
-            Last_end_time DESC;
-        '''
-    
     st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">',unsafe_allow_html=True)
-    # st.markdown("", unsafe_allow_html=True)
     
     st.markdown(
         """
@@ -1367,8 +1214,6 @@ def upcoming_sch_idle_time():
                 """,
         unsafe_allow_html=True,
     )
-    idle_df = session.sql(idle_query)
-    idle_df = idle_df.to_pandas()
     column_config1 = {
         "FROM_DATETIME": st.column_config.Column("FROM DATETIME (PST)", width="medium"),
         "TO_DATETIME": st.column_config.Column("TO DATETIME (PST)", width="medium"),

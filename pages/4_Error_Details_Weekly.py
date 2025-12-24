@@ -1,8 +1,6 @@
 import streamlit as st
-# import snowflake
-#from snowflake.snowpark.context import session
-from spcs_helpers.connection import session
 import pandas as pd
+from spcs_helpers.connection import session
 import json
 import plotly.express as px
 import streamlit as st
@@ -42,6 +40,7 @@ def convert_to_pst(epoch_time):
     pst_time = utc_time.astimezone (pst_timezone)
     return pst_time.strftime('%Y-%m-%d %H:%M:%S.%f')
 
+@st.cache_data(ttl=300, show_spinner=False)
 def mat_failed_df():
     query = """
     with cte_dbt_status as (
@@ -119,6 +118,7 @@ def mat_failed_df():
 
     return df
 
+@st.cache_data(ttl=300, show_spinner=False)
 def dbt_failed_jobs (param, time_input_start, time_input_end): 
     time_input_start=str(time_input_start).replace('+00:00','') 
     time_input_end=str(time_input_end).replace('+00:00','')
@@ -217,6 +217,7 @@ def dbt_failed_jobs (param, time_input_start, time_input_end):
     
     return final_merge_df
 
+@st.cache_data(ttl=300, show_spinner=False)
 def mat_running_run_and_queue():
     
     mat_session = session
@@ -286,6 +287,7 @@ def mat_running_run_and_queue():
     mat_data = pd.merge(mat_data, comments_df, on='TASK_HISTORY_ID', how='left') 
     return mat_data[mat_data['STATUS']=='FAILED']
 
+@st.cache_data(ttl=300, show_spinner=False)
 def failed_dbt_data():
     dbt_session = session
     query_failed = '''
@@ -333,179 +335,191 @@ def failed_dbt_data():
     final_fail_df = failed_df[columns_to_display]
     return final_fail_df
 
-#session = session
-										  
-spinner_placeholder=st.empty()
-with st.spinner ('Loading, please wait...'):
-    #st.session_state.spinner_text='Loading dataframe and charts...'
-    #spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading dataframe and charts...</p>", unsafe_allow_html=True) 
-    cl1, cl2, cl3 = st.columns ([4,1,1])
-    with cl3:
-        st.image("assets/logo_cloudeqs.png", width=200)
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_all_error_data():
+    """Cached loader - executes all SQL queries once, results cached for 5 mins."""
+    gmt_end_time = datetime.now(timezone.utc)
+    gmt_start_time = datetime.now(timezone.utc) - timedelta(hours=24)
+    
+    dbt_api_failed_df = dbt_failed_jobs(20, gmt_start_time, gmt_end_time)
+    dbt_df = failed_dbt_data()
+    df = pd.concat([dbt_df, dbt_api_failed_df], ignore_index=True)
+    df = df.drop_duplicates(subset=['TASK_HISTORY_ID'])
+    
+    mat_df = mat_failed_df()
+    df = pd.concat([df, mat_df], ignore_index=True)
+    
+    mat_api_fail = mat_running_run_and_queue()
+    mat_api_fail['START_TIME'] = pd.to_datetime(mat_api_fail['START_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S')
+    mat_api_fail['END_TIME'] = pd.to_datetime(mat_api_fail['END_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S')
+    df['START_TIME'] = pd.to_datetime(df['START_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S')
+    df['END_TIME'] = pd.to_datetime(df['END_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S')
+    
+    df = pd.concat([df, mat_api_fail], ignore_index=True)
+    df['STATUS'] = 'FAILED'
+    
+    return df
 
-
-
-with st.container(border=False):
-    st.markdown(
-        """
-        <div>
-            <h1 style="font-family: Inter, sans-serif; font-size: 22px; text-align: left;">
-                Error Details Weekly
-            </h1>
-        </div>
-        """, unsafe_allow_html=True
-    )
-    st.markdown("")
-
-																  
-
-local_time = time.localtime()
-gmt_end_time = datetime.now(timezone.utc)
-gmt_start_time = datetime.now(timezone.utc) - timedelta (hours=24)
-
-dbt_api_failed_df = dbt_failed_jobs(20, gmt_start_time,gmt_end_time) 
-# st.dataframe (dbt_api_failed_df)
-
-dbt_df=failed_dbt_data()
-
-df=pd.concat([dbt_df, dbt_api_failed_df], ignore_index=True) 
-df=df.drop_duplicates (subset=['TASK_HISTORY_ID'])
-# st.dataframe (df)
-
-mat_df=mat_failed_df()
-#st.dataframe (mat_df)
-df=pd.concat([df, mat_df], ignore_index=True)
-
-mat_api_fail=mat_running_run_and_queue()
-mat_api_fail['START_TIME'] = pd.to_datetime(mat_api_fail['START_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S') 
-mat_api_fail['END_TIME'] = pd.to_datetime(mat_api_fail['END_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S')
-df['START_TIME'] = pd.to_datetime(df['START_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S') 
-df['END_TIME'] = pd.to_datetime(df['END_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S')
-
-df=pd.concat([df, mat_api_fail], ignore_index=True)
-# st.dataframe (mat_api_fail)
-
-source_type_options = ['ALL', 'DBT', 'MATILLION'] #+ list(df['SOURCE_TYPE'].unique())
-status_options = ['FAILED']
-#comment_options = ['ALL']+ list(df['COMMENTS'].unique())
-
-df['STATUS']='FAILED'
-
-# st.dataframe(df)
-with st.container(border=False):
-    col1, col2, col3, col4 = st.columns(4)
-																							  
-									  
-			  
-																																						  
-																												   
-
-    with col1:
-        from_date_time_filter = st.date_input(
-            "Select From Date", (pd.to_datetime(df["START_TIME"].max())).date()
+@st.fragment
+def render_error_details_fragment():
+    """Fragment: Error Details with session_state filters - only this re-renders on filter change."""
+    # Load cached data once
+    if 'error_details_data' not in st.session_state:
+        with st.spinner('Loading error details...'):
+            st.session_state['error_details_data'] = fetch_all_error_data()
+    
+    df = st.session_state['error_details_data'].copy()
+    
+    # Initialize session state for filters
+    if 'error_filters' not in st.session_state:
+        st.session_state['error_filters'] = {
+            'from_date': (pd.to_datetime(df["START_TIME"].max())).date(),
+            'to_date': (pd.to_datetime(df["END_TIME"].max())).date(),
+            'source_type': 'ALL',
+        }
+    
+    source_type_options = ['ALL', 'DBT', 'MATILLION']
+    status_options = ['FAILED']
+    
+    with st.container(border=False):
+        st.markdown(
+            """
+            <div>
+                <h1 style="font-family: Inter, sans-serif; font-size: 22px; text-align: left;">
+                    Error Details Weekly
+                </h1>
+            </div>
+            """, unsafe_allow_html=True
         )
-
-    with col2:
-        to_date_time_filter = st.date_input(
-            "Select To Date", (pd.to_datetime(df["END_TIME"].max())).date()
+        st.markdown("")
+        
+        # Callback for filter changes
+        def _update_error_filters():
+            st.session_state['error_filters'] = {
+                'from_date': st.session_state.get('error_from_date_sel', st.session_state['error_filters']['from_date']),
+                'to_date': st.session_state.get('error_to_date_sel', st.session_state['error_filters']['to_date']),
+                'source_type': st.session_state.get('error_source_sel', 'ALL'),
+            }
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            from_date_time_filter = st.date_input(
+                "Select From Date",
+                value=st.session_state['error_filters']['from_date'],
+                key='error_from_date_sel',
+                on_change=_update_error_filters
+            )
+        
+        with col2:
+            to_date_time_filter = st.date_input(
+                "Select To Date",
+                value=st.session_state['error_filters']['to_date'],
+                key='error_to_date_sel',
+                on_change=_update_error_filters
+            )
+        
+        with col3:
+            source_type_filter = st.selectbox(
+                "Source Type",
+                options=source_type_options,
+                index=0,
+                key='error_source_sel',
+                on_change=_update_error_filters
+            )
+        
+        with col4:
+            status_filter = st.selectbox("Status", options=status_options, index=0)
+        
+        # Use filters from session state
+        from_date_val = st.session_state['error_filters']['from_date']
+        to_date_val = st.session_state['error_filters']['to_date']
+        source_type_val = st.session_state['error_filters']['source_type']
+        
+        # Apply filters locally (no SQL re-execution)
+        if source_type_val == 'ALL':
+            df_filtered = df[(pd.to_datetime(df["START_TIME"]).dt.date >= from_date_val) & 
+                            (pd.to_datetime(df["END_TIME"]).dt.date <= to_date_val)]
+        else:
+            df_filtered = df[(pd.to_datetime(df["START_TIME"]).dt.date >= from_date_val) & 
+                            (pd.to_datetime(df["END_TIME"]).dt.date <= to_date_val) & 
+                            (df['SOURCE_TYPE'] == source_type_val)]
+        
+        df_filtered = df_filtered.copy()
+        df_filtered['LINKS'] = df_filtered.apply(
+            lambda row: f"https://13.90.90.241:8443/#CLOUDX/{row['PROJECT_NAME']}/default/{row['SCHEDULE_NAME']}/run/{row['TASK_HISTORY_ID']}" 
+            if row['SOURCE_TYPE'] == "MATILLION" else row['LINKS'], axis=1
         )
-
-    with col3:
-        source_type_filter = st.selectbox("Source Type", options=source_type_options, index=0)
-
-											
-					   
-			 
-    with col4:
-        status_filter = st.selectbox("Status", options=status_options, index=0)
-    if source_type_filter=='ALL':
-        df_filtered = df[(pd.to_datetime(df["START_TIME"]).dt.date >= from_date_time_filter) & (pd.to_datetime(df["END_TIME"]).dt.date <= to_date_time_filter)]
-    else:
-        df_filtered = df[
-            (pd.to_datetime(df["START_TIME"]).dt.date >= from_date_time_filter) & (pd.to_datetime(df["END_TIME"]).dt.date <= to_date_time_filter) & (df['SOURCE_TYPE'] == source_type_filter)]
-
-
-    df_filtered['LINKS'] = df_filtered.apply(
-        lambda row: f"https://13.90.90.241:8443/#CLOUDX/{row['PROJECT_NAME']}/default/{row['SCHEDULE_NAME']}/run/{row['TASK_HISTORY_ID']}" if row['SOURCE_TYPE'] == "MATILLION" else row['LINKS'],axis=1
-											 
-						  
-			  
-    )
-
-    df_filtered = df_filtered.sort_values(by='START_TIME', ascending=False)
-
-    df_filtered['START_TIME'] = pd.to_datetime(df_filtered['START_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S5.%f').str[:-3] 
-																	  
-								   
-		 
-    df_filtered['END_TIME'] = pd.to_datetime(df_filtered['END_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S.%f').str[:-3]
-																  
-								   
-
-    column_config1={
-        "PROJECT_NAME": st.column_config.Column(
-            "PROJECT NAME",
-            help="Project Name",
-            width="medium"
-        ),
-        "SCHEDULE_NAME": st.column_config.Column(
-            "SCHEDULE NAME",
-            help="SCHEDULE NAME",
-            width="medium"
-        ),
-        "JOB_TAG_NAME": st.column_config.Column(
-            "JOB/TAG NAME",
-            help="JOB/TAG NAME",
-            width="medium"
-        ),
-        "START_TIME": st.column_config.Column(
-            "START TIME (PST)",
-            help="Start TIME (PST)",
-            width="medium"
-        ),
-        "END_TIME": st.column_config.Column( 
-            "END TIME (PST)",
-            help="END TIME (PST)",
-            width="medium"
-        ),
-        "TOTAL_RUNTIME_MINUTES": st.column_config.Column(
-            "TOTAL RUNTIME (MIN)",
-            help="TOTAL RUNTIME (MINS)",
-            width="medium"
-        ),
-        "ERROR_MESSAGE": st.column_config.Column(
-            "ERROR MESSAGE",
-            help="ERROR MESSAGE",
-            width="medium"
-        ),
-        "TASK_HISTORY_ID": st.column_config.Column(
-            "TASK HISTORY ID",
-            help="TASK HISTORY ID",
-            width="medium"
-        ),
-        "SOURCE_TYPE": st.column_config.Column(
-            "SOURCE TYPE",
-            help="SOURCE TYPE",
-            width="medium"
-        ),
-        "LINKS": st.column_config.LinkColumn( 
-            "LINKS",
-            help="LINKS",
-            width="medium",
-        display_text="Details",
-        ),
-        "TRIGGER_BY": st.column_config.Column(
-            "TRIGGER BY",
-            help="TRIGGER BY",
-            width="medium"
-        ),
-            "REVIEWER_NAME":st.column_config.Column(
-            "REVIEWER NAME",
-            help="REVIEWER NAME",
-            width="medium"
-)
-    }
-    def color_status(val):
+        
+        df_filtered = df_filtered.sort_values(by='START_TIME', ascending=False)
+        df_filtered['START_TIME'] = pd.to_datetime(df_filtered['START_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S.%f').str[:-3]
+        df_filtered['END_TIME'] = pd.to_datetime(df_filtered['END_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S.%f').str[:-3]
+        
+        column_config1 = {
+            "PROJECT_NAME": st.column_config.Column(
+                "PROJECT NAME",
+                help="Project Name",
+                width="medium"
+            ),
+            "SCHEDULE_NAME": st.column_config.Column(
+                "SCHEDULE NAME",
+                help="SCHEDULE NAME",
+                width="medium"
+            ),
+            "JOB_TAG_NAME": st.column_config.Column(
+                "JOB/TAG NAME",
+                help="JOB/TAG NAME",
+                width="medium"
+            ),
+            "START_TIME": st.column_config.Column(
+                "START TIME (PST)",
+                help="Start TIME (PST)",
+                width="medium"
+            ),
+            "END_TIME": st.column_config.Column(
+                "END TIME (PST)",
+                help="END TIME (PST)",
+                width="medium"
+            ),
+            "TOTAL_RUNTIME_MINUTES": st.column_config.Column(
+                "TOTAL RUNTIME (MIN)",
+                help="TOTAL RUNTIME (MINS)",
+                width="medium"
+            ),
+            "ERROR_MESSAGE": st.column_config.Column(
+                "ERROR MESSAGE",
+                help="ERROR MESSAGE",
+                width="medium"
+            ),
+            "TASK_HISTORY_ID": st.column_config.Column(
+                "TASK HISTORY ID",
+                help="TASK HISTORY ID",
+                width="medium"
+            ),
+            "SOURCE_TYPE": st.column_config.Column(
+                "SOURCE TYPE",
+                help="SOURCE TYPE",
+                width="medium"
+            ),
+            "LINKS": st.column_config.LinkColumn(
+                "LINKS",
+                help="LINKS",
+                width="medium",
+                display_text="Details",
+            ),
+            "TRIGGER_BY": st.column_config.Column(
+                "TRIGGER BY",
+                help="TRIGGER BY",
+                width="medium"
+            ),
+            "REVIEWER_NAME": st.column_config.Column(
+                "REVIEWER NAME",
+                help="REVIEWER NAME",
+                width="medium"
+            )
+        }
+        
+        def color_status(val):
             color_map = {
                 "SUCCESS": "#5b85fb",
                 "FAILED": "#f26271",
@@ -514,19 +528,18 @@ with st.container(border=False):
                 "QUEUED": "#fee8c6",
             }
             return f'background-color: {color_map.get(val, "white")}; font-weight:bold; font-family: Inter, sans-serif;'
-    
-    df_styled = df_filtered.style.applymap(
+        
+        df_styled = df_filtered.style.applymap(
             color_status, subset=["STATUS"]
         ).set_table_styles(
             [
                 {
                     "selector": "th",
                     "props": [
-                        ("background-color", "#7fcbf0"),  # Dark blue-gray header
+                        ("background-color", "#7fcbf0"),
                         ("color", "#000"),
                         ("font-size", "12px"),
                         ("font-family", "Inter, sans-serif"),
-                        # ("font-weight", "bold"),
                         ("text-align", "center"),
                     ],
                 },
@@ -541,13 +554,27 @@ with st.container(border=False):
                 },
             ]
         )
-
-    st.dataframe(
+        
+        st.dataframe(
             df_styled,
             column_config=column_config1,
             use_container_width=True,
             hide_index=True,
         )
+
+#session = session
+										  
+spinner_placeholder=st.empty()
+with st.spinner ('Loading, please wait...'):
+    #st.session_state.spinner_text='Loading dataframe and charts...'
+    #spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading dataframe and charts...</p>", unsafe_allow_html=True) 
+    cl1, cl2, cl3 = st.columns ([4,1,1])
+    with cl3:
+        st.image("assets/logo_cloudeqs.png", width=200)
+
+
+# Call the fragment
+render_error_details_fragment()
 
 
 # with st.container(border=False):

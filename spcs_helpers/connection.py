@@ -47,6 +47,6 @@ def session(user_token: str = None) -> Session:
         "MY_CONNECTION_WITH_SSO",
         type="snowflake",
         authenticator="externalbrowser",
-        user="jasjots@cloudeqs.com",
+        user="parvinders@cloudeqs.com",
         account="KHA80474"
     ).session()
