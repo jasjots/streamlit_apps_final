@@ -8,14 +8,24 @@ def load_icon(path):
     return base64.b64encode(Path(path).read_bytes()).decode()
 
 def nav_button(icon, label, key, page):
-    clicked = st.button("", key=key)
-    if clicked:
-        st.switch_page(page)
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "app.py"
+
+    is_active = st.session_state.current_page == page
 
     icon_base64 = load_icon(ICON_PATH / icon)
+    indicator = '<div class="active-indicator"></div>' if is_active else ""
+
+    # 👇 Wrap everything in ONE container div
+    st.markdown('<div class="nav-item">', unsafe_allow_html=True)
+
+    if st.button("", key=key):
+        st.session_state.current_page = page
+        st.switch_page(page)
 
     st.markdown(
         f"""
+        {indicator}
         <div class="icon-wrapper">
             <img src="data:image/svg+xml;base64,{icon_base64}" class="sidebar-icon-img"/>
         </div>
@@ -24,8 +34,24 @@ def nav_button(icon, label, key, page):
         unsafe_allow_html=True
     )
 
+    st.markdown('</div>', unsafe_allow_html=True)
+
 def render_sidebar():
     with st.sidebar:
+
+        # ---------- LOGO ----------
+        logo_path = Path("assets/logo_cloudeqs.png")
+        logo_base64 = base64.b64encode(logo_path.read_bytes()).decode()
+
+        st.markdown(
+            f"""
+            <div class="sidebar-logo">
+                <img src="data:image/png;base64,{logo_base64}" />
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
         nav_button("home.svg", "Home", "home", "3_Home.py")
         nav_button("admin.svg", "Admin", "admin", "pages/1_Admin.py")
         nav_button("settings.svg", "Adhoc Run", "adhoc", "pages/2_Adhoc_Run.py")

@@ -12,6 +12,7 @@ st.set_page_config(
     initial_sidebar_state="expanded", 
 )
 
+
 def load_css(path):
     with open(path) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
@@ -21,28 +22,60 @@ load_css("CSS/admin.css")
 
 from sidebar import render_sidebar
 render_sidebar()
-
-spinner_placeholder=st.empty()
-with st.spinner ('Loading, please wait...'):
-    #st.session_state.spinner_text='Loading dataframe and charts...'
-    #spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading dataframe and charts...</p>", unsafe_allow_html=True) 
-    cl1, cl2, cl3 = st.columns ([4,1,1])
-    with cl3:
-        st.image("assets/logo_cloudeqs.png", width=200)
-
-
-
-
 with st.container(border=False):
     st.markdown(
         """
         <div>
-            <h1 style="font-family: Inter, sans-serif; font-size: 25px; text-align: left;">
-                RBC Admin Page 
+            <h1 class="hover-effect">
+                RBAC Admin Page
             </h1>
         </div>
         """, unsafe_allow_html=True
     )
+# spinner_placeholder=st.empty()
+# with st.spinner ('Loading, please wait...'):
+    #st.session_state.spinner_text='Loading dataframe and charts...'
+    #spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading dataframe and charts...</p>", unsafe_allow_html=True) 
+    # cl1, cl2, cl3 = st.columns ([4,1,1])
+    # with cl3:
+    #     st.image("assets/logo_cloudeqs.png", width=200)
+
+
+
+
+# with st.container(border=False):
+#     st.markdown(
+#         """
+#         <div>
+#             <h1 class="hover-effect">
+#                 RBAC Admin Page
+#             </h1>
+#         </div>
+#         """, unsafe_allow_html=True
+#     )
+
+# spinner_placeholder=st.empty()
+# with st.spinner ('Loading, please wait...'):
+#     #st.session_state.spinner_text='Loading dataframe and charts...'
+#     #spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading dataframe and charts...</p>", unsafe_allow_html=True) 
+#     cl1, cl2, cl3 = st.columns ([4,1,1])
+#     with cl3:
+#         st.image("assets/logo_cloudeqs.png", width=200)
+
+
+
+
+# st.title("🔐 RBC Admin Page")
+# with st.container(border=True):
+
+#     st.markdown(
+#         """
+#         <h1 style="font-family: Inter, sans-serif; font-size: 18px; text-align: left;">
+#             Add New User
+#         </h1>
+#         """,
+#         unsafe_allow_html=True
+#     )
 
 
 # --- Helper Functions ---
@@ -98,6 +131,7 @@ def delete_user(username):
 
 
 # st.title("🔐 RBC Admin Page")
+
 with st.container(border=True):
 
     st.markdown(
@@ -134,8 +168,6 @@ with st.container(border=True):
             st.error("❌ Please select all fields.")
 
 
-# Show existing users
-st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">',unsafe_allow_html=True)
 with st.container(border=True):
 
     st.markdown(
@@ -146,49 +178,92 @@ with st.container(border=True):
         """,
         unsafe_allow_html=True
     )
-    
+
 
     df_users = load_users()
 
     if df_users.empty:
         st.info("No admin users found.")
     else:
+        # -------- TABLE HEADER --------
+        header_cols = st.columns([2.2, 2, 2, 2])
+        headers = ["Username", "Role", "Access", "Action"]
+
+        for col, header in zip(header_cols, headers):
+            col.markdown(
+                f"""
+                <p style="
+                    font-weight:600;
+                    font-size:14px;
+                    text-align:center;
+                    margin-top: 8px;
+                    margin-bottom: 5px;
+                ">
+                    {header}
+                </p>
+                """,
+                unsafe_allow_html=True
+            )
+
+        st.divider()
+
+        # -------- TABLE ROWS --------
         for index, row in df_users.iterrows():
 
-            st.markdown('<div class="user-row-card">', unsafe_allow_html=True)
+            with st.container():
+                st.markdown("<div class='user-row-card'>", unsafe_allow_html=True)
 
-            col1, col2, col3, col4, col5 = st.columns([2.2, 2, 2, 1, 1])
+                col1, col2, col3, col4 = st.columns([2.2, 2, 2, 2])
 
-            with col1:
-                st.markdown(
-                    f"<p class='user-text'>{row['USERNAME']}</p>",
-                    unsafe_allow_html=True
-                )
+                # Username
+                with col1:
+                    st.markdown(
+                        f"<p class='user-text'>{row['USERNAME']}</p>",
+                        unsafe_allow_html=True
+                    )
 
-            with col2:
-                new_role = st.selectbox(
-                    f"Role_{index}",
-                    roles,
-                    index=roles.index(row["ROLE"]) if row["ROLE"] in roles else 0
-                )
+                # Role
+                with col2:
+                    new_role = st.selectbox(
+                        "Role",
+                        roles,
+                        index=roles.index(row["ROLE"]) if row["ROLE"] in roles else 0,
+                        key=f"role_{index}",
+                        label_visibility="collapsed"
+                    )
 
-            with col3:
-                new_access = st.selectbox(
-                    f"Access_{index}",
-                    ["Admin", "Viewer"],
-                    index=["Admin", "Viewer"].index(row["ACCESS"])
-                )
+                # Access
+                with col3:
+                    new_access = st.selectbox(
+                        "Access",
+                        ["Admin", "Viewer"],
+                        index=["Admin", "Viewer"].index(row["ACCESS"]),
+                        key=f"access_{index}",
+                        label_visibility="collapsed"
+                    )
 
-            with col4:
-                if st.button("💾 Save", key=f"save_{row['USERNAME']}"):
-                    update_user(row["USERNAME"], new_role, new_access)
-                    st.success(f"✅ Updated {row['USERNAME']}")
-                    st.rerun()
+                # Actions
+                with col4:
+                    action_col1, action_col2 = st.columns([1, 1])
 
-            with col5:
-                if st.button("🗑️ Delete", key=f"delete_{row['USERNAME']}"):
-                    delete_user(row["USERNAME"])
-                    st.warning(f"🗑️ Deleted {row['USERNAME']}")
-                    st.rerun()
+                    with action_col1:
+                        if st.button(
+                            "Update",
+                            key=f"update_{row['USERNAME']}",
+                            use_container_width=True
+                        ):
+                            update_user(row["USERNAME"], new_role, new_access)
+                            st.success(f"Updated {row['USERNAME']}")
+                            st.rerun()
 
-            st.markdown('</div>', unsafe_allow_html=True)
+                    with action_col2:
+                        if st.button(
+                            "Delete",
+                            key=f"delete_{row['USERNAME']}",
+                            use_container_width=True
+                        ):
+                            delete_user(row["USERNAME"])
+                            st.warning(f"Deleted {row['USERNAME']}")
+                            st.rerun()
+
+                st.markdown("</div>", unsafe_allow_html=True)

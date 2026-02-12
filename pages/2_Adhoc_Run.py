@@ -20,16 +20,14 @@ import sys
 from streamlit.web.server.websocket_headers import _get_websocket_headers
 from constants import CONSTANTS
 
-st.set_page_config(page_title="Ad-Hoc DBT Job Runner", page_icon="", layout="wide")
-
-
+st.set_page_config(
+    page_title="Ad-Hoc DBT Job Runner", 
+    page_icon="", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 snowflake_session = session()
-st.set_page_config(
-    page_title="RBAC Admin Page",
-    layout="wide",
-    initial_sidebar_state="expanded", 
-)
 
 def load_css(path):
     with open(path) as f:
@@ -41,13 +39,13 @@ load_css("CSS/admin.css")
 from sidebar import render_sidebar
 render_sidebar()
 
-spinner_placeholder=st.empty()
-with st.spinner ('Loading, please wait...'):
-    #st.session_state.spinner_text='Loading dataframe and charts...'
-    #spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading dataframe and charts...</p>", unsafe_allow_html=True) 
-    cl1, cl2, cl3 = st.columns ([4,1,1])
-    with cl3:
-        st.image("assets/logo_cloudeqs.png", width=200)
+# spinner_placeholder=st.empty()
+# with st.spinner ('Loading, please wait...'):
+#     #st.session_state.spinner_text='Loading dataframe and charts...'
+#     #spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading dataframe and charts...</p>", unsafe_allow_html=True) 
+#     cl1, cl2, cl3 = st.columns ([4,1,1])
+#     with cl3:
+#         st.image("assets/logo_cloudeqs.png", width=200)
 
 tab_dbt, tab_matilion = st.tabs(["ADHOC RUNS DBT","ADHOC RUNS MATILION"])
 
@@ -86,13 +84,14 @@ with tab_dbt :
 
     email_id = st.context.headers.get("Sf-Context-Current-User") or "Visitor"
     user_token = st.context.headers.get("Sf-Context-Current-User-Token") or ""
-    st.sidebar.header(f"Hi! {email_id}")
+    # st.sidebar.header(f"Hi! {email_id}")
     # st.sidebar.text_area("User Token", user_token, height=100)
     session = session(user_token)
     #email_id = session.sql("SELECT CURRENT_USER();").to_pandas().iloc[0,0]
-    st.sidebar.text(f"What is on you mind today {email_id}?")
+    # st.sidebar.text(f"What is on you mind today {email_id}?")
     REQUIRED_ROLE = session.sql("SELECT CURRENT_ROLE();").to_pandas().iloc[0,0]
-    st.sidebar.text(f"Role:{REQUIRED_ROLE}")
+    # st.sidebar.text(f"Role:{REQUIRED_ROLE}")
+ 
 
     # try:
     #     if os.path.isfile(".snowflake/session/token"):
@@ -301,8 +300,8 @@ with tab_dbt :
         user_has_access = user_access in REQUIRED_ACCESS
 
         if user_has_access:
-            st.success(f"✅ Access granted to Ad-Hoc Runs. Welcome, {email_id}!")
-            st.markdown("<p style='color: green;'>You have the necessary permission to execute the Ad-Hoc Jobs for CS Analytics Mart.</p>", unsafe_allow_html=True)
+            # st.success(f"✅ Access granted to Ad-Hoc Runs. Welcome, {email_id}!")
+            # st.markdown("<p style='color: green;'>You have the necessary permission to execute the Ad-Hoc Jobs for CS Analytics Mart.</p>", unsafe_allow_html=True)
             
             col1, col2 = st.columns(2, gap="large")
             with col1:
@@ -477,15 +476,15 @@ with tab_dbt :
                 unsafe_allow_html=True,
             )
         st.markdown("---")
-        st.markdown(
-        """
-        <div style="text-align: center; font-size: 0.9em; color: #888;">
-            Built with ❤️ using Streamlit and DBT Cloud API by <strong>Cloudeqs</strong>.<br>
-            Copyright © 2025.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    #     st.markdown(
+    #     """
+    #     <div style="text-align: center; font-size: 0.9em; color: #888;">
+    #         Built with ❤️ using Streamlit and DBT Cloud API by <strong>Cloudeqs</strong>.<br>
+    #         Copyright © 2025.
+    #     </div>
+    #     """,
+    #     unsafe_allow_html=True,
+    # )
     st.markdown(
             """
             <div style="text-align: center; padding: 15px; background-color: #f4f4fa; border-radius: 10px; margin-bottom: 20px;">
@@ -498,168 +497,167 @@ with tab_dbt :
 
     adhoc_cs_page()
 
-with tab_matilion:
-        # Add .../streamlit_github (project root) to sys.path
-    PROJECT_ROOT = Path(__file__).resolve().parents[2]
-    if str(PROJECT_ROOT) not in sys.path:
-        sys.path.insert(0, str(PROJECT_ROOT))
+# with tab_matilion:
+#     # Add .../streamlit_github (project root) to sys.path
+#     PROJECT_ROOT = Path(__file__).resolve().parents[2]
+#     if str(PROJECT_ROOT) not in sys.path:
+#         sys.path.insert(0, str(PROJECT_ROOT))
 
-    from matillion_api import (
-        list_projects, list_environments, list_published_pipelines,
-        execute_pipeline, get_execution_status, cancel_execution, recent_executions
-    )
+#     from matillion_api import (
+#         list_projects, list_environments, list_published_pipelines,
+#         execute_pipeline, get_execution_status, cancel_execution, recent_executions
+#     )
 
-    # -------------------------
-    # UI
-    # -------------------------
-    st.set_page_config(page_title="Run & Monitor Pipelines", layout="wide")
-    st.title("Run & Monitor Matillion Pipelines")
+#     # -------------------------
+#     # UI
+#     # -------------------------
+#     st.title("Run & Monitor Matillion Pipelines")
 
-    with st.sidebar:
-        #st.logo("observability_app/src/assets/logo_cloudeqs.png", size="large")
-        st.logo("./assets/logo_cloudeqs.png", size="large")
-        st.header("Select Context")
+#     with st.sidebar:
+#        #st.logo("observability_app/src/assets/logo_cloudeqs.png", size="large")
+#        # st.logo("./assets/logo_cloudeqs.png", size="large")
+#        # st.header("Select Context")
 
-        projects = list_projects()
-        if not projects:
-            st.stop()
+#        projects = list_projects()
+#        if not projects:
+#            st.stop()
 
-        proj_names = [f"{p.get('name')} ({p.get('id')})" for p in projects]
-        proj_idx = st.selectbox("Project", options=range(len(projects)), format_func=lambda i: proj_names[i])
-        project = projects[proj_idx]
-        project_id = project["id"]
+#        # proj_names = [f"{p.get('name')} ({p.get('id')})" for p in projects]
+#        # proj_idx = st.selectbox("Project", options=range(len(projects)), format_func=lambda i: proj_names[i])
+#        # project = projects[proj_idx]
+#        # project_id = project["id"]
 
-        envs = list_environments(project_id)
-        if not envs:
-            st.warning("No environments found in this project.")
-            st.stop()
+#        # envs = list_environments(project_id)
+#        # if not envs:
+#        #     st.warning("No environments found in this project.")
+#        #     st.stop()
 
-        filtered = [r for r in envs ]
-        sorted_env = sorted(filtered, key=lambda r: r.get("name", "").lower())
-        env_names = [e["name"] for e in sorted_env]
-        env_name = st.selectbox("Environment", env_names)
+#        # filtered = [r for r in envs ]
+#        # sorted_env = sorted(filtered, key=lambda r: r.get("name", "").lower())
+#        # env_names = [e["name"] for e in sorted_env]
+#        # env_name = st.selectbox("Environment", env_names)
 
-        pipelines = list_published_pipelines(project_id, env_name)
-        if not pipelines:
-            st.warning("No published pipelines found in this project.")
-            st.stop()
+#        # pipelines = list_published_pipelines(project_id, env_name)
+#        # if not pipelines:
+#        #     st.warning("No published pipelines found in this project.")
+#        #     st.stop()
 
-        filtered = [r for r in pipelines ]
-        sorted_results = sorted(filtered, key=lambda r: r.get("name", "").lower())
-        pipe_names = [p['name'] for p in sorted_results]
-        pipeline_name = st.selectbox("Pipeline", pipe_names, index=0)
+#        # filtered = [r for r in pipelines ]
+#        # sorted_results = sorted(filtered, key=lambda r: r.get("name", "").lower())
+#        # pipe_names = [p['name'] for p in sorted_results]
+#        # pipeline_name = st.selectbox("Pipeline", pipe_names, index=0)
 
-        exec_tag = st.text_input("Execution Tag (optional)")
-        autorun = st.toggle("Auto-monitor after starting", value=True)
-        run_btn = st.button("Run Pipeline", type="primary", use_container_width=True)
+#        # exec_tag = st.text_input("Execution Tag (optional)")
+#        # autorun = st.toggle("Auto-monitor after starting", value=True)
+#        # run_btn = st.button("Run Pipeline", type="primary", use_container_width=True)
 
-    st.subheader("Execute & Monitor")
+#    # st.subheader("Execute & Monitor")
 
-    if run_btn:
-        try:
-            with st.status("Submitting run request…", state="running") as s:
-                resp = execute_pipeline(project_id, env_name, pipeline_name, exec_tag or None)
-                peid = resp.get("pipelineExecutionId")
-                if not peid:
-                    s.update(label="No execution ID returned.", state="error")
-                    st.stop()
-                s.update(label=f"Started execution: {peid}", state="complete")
-                st.session_state.last_exec_id = peid
-        except requests.HTTPError as e:
-            st.error(f"Failed to start pipeline: {e.response.text if e.response is not None else e}")
-        except Exception as e:
-            st.error(f"Failed to start pipeline: {e}")
+#    # if run_btn:
+#    #     try:
+#    #         with st.status("Submitting run request…", state="running") as s:
+#    #             resp = execute_pipeline(project_id, env_name, pipeline_name, exec_tag or None)
+#    #             peid = resp.get("pipelineExecutionId")
+#    #             if not peid:
+#    #                 s.update(label="No execution ID returned.", state="error")
+#    #                 st.stop()
+#    #             s.update(label=f"Started execution: {peid}", state="complete")
+#    #             st.session_state.last_exec_id = peid
+#    #     except requests.HTTPError as e:
+#    #         st.error(f"Failed to start pipeline: {e.response.text if e.response is not None else e}")
+#    #     except Exception as e:
+#    #         st.error(f"Failed to start pipeline: {e}")
 
-    peid = st.session_state.get("last_exec_id")
-    peid_input = st.text_input("Pipeline Execution ID (monitor any ID)", value=peid or "", placeholder="1398aa31-af57-4a6a-9752-27c2e8556c3f")
+#    # peid = st.session_state.get("last_exec_id")
+#    # peid_input = st.text_input("Pipeline Execution ID (monitor any ID)", value=peid or "", placeholder="1398aa31-af57-4a6a-9752-27c2e8556c3f")
 
-    c1, c2, c3 = st.columns([1, 1, 1])
-    with c1:
-        start_monitor = st.button("Start monitoring", use_container_width=True)
-    with c2:
-        stop_monitor = st.button("Stop monitoring", use_container_width=True, disabled=True)
-    with c3:
-        cancel_btn = st.button("Cancel execution", use_container_width=True, disabled=not peid_input)
+#    # c1, c2, c3 = st.columns([1, 1, 1])
+#    # with c1:
+#    #     start_monitor = st.button("Start monitoring", use_container_width=True)
+#    # with c2:
+#    #     stop_monitor = st.button("Stop monitoring", use_container_width=True, disabled=True)
+#    # with c3:
+#    #     cancel_btn = st.button("Cancel execution", use_container_width=True, disabled=not peid_input)
 
-    if cancel_btn and peid_input:
-        try:
-            cancel_execution(project_id, peid_input)
-            st.success("Cancellation requested.")
-        except requests.HTTPError as e:
-            st.error(f"Cancel failed: {e.response.text if e.response is not None else e}")
-        except Exception as e:
-            st.error(f"Cancel failed: {e}")
+#    # if cancel_btn and peid_input:
+#    #     try:
+#    #         cancel_execution(project_id, peid_input)
+#    #         st.success("Cancellation requested.")
+#    #     except requests.HTTPError as e:
+#    #         st.error(f"Cancel failed: {e.response.text if e.response is not None else e}")
+#    #     except Exception as e:
+#    #         st.error(f"Cancel failed: {e}")
 
-    if (autorun and run_btn) or start_monitor:
-        if not peid_input:
-            st.warning("Enter a Pipeline Execution ID to monitor.")
-        else:
-            ph_status = st.empty()
-            ph_meta = st.empty()
-            ph_progress = st.progress(0, text="Waiting for status…")
+#    # if (autorun and run_btn) or start_monitor:
+#    #     if not peid_input:
+#    #         st.warning("Enter a Pipeline Execution ID to monitor.")
+#    #     else:
+#    #         ph_status = st.empty()
+#    #         ph_meta = st.empty()
+#    #         ph_progress = st.progress(0, text="Waiting for status…")
 
-            TERMINAL = {"SUCCESS", "FAILED", "TERMINATED"}
-            max_seconds = 5 * 60
-            poll_every = 3
-            waited = 0
+#    #         TERMINAL = {"SUCCESS", "FAILED", "TERMINATED"}
+#    #         max_seconds = 5 * 60
+#    #         poll_every = 3
+#    #         waited = 0
 
-            while waited <= max_seconds:
-                try:
-                    data = get_execution_status(project_id, peid_input)
-                    result = (data or {}).get("result", {})
-                    status = result.get("status", "UNKNOWN")
-                    started = result.get("startedAt")
-                    finished = result.get("finishedAt")
-                    message = result.get("message")
+#    #         while waited <= max_seconds:
+#    #             try:
+#    #                 data = get_execution_status(project_id, peid_input)
+#    #                 result = (data or {}).get("result", {})
+#    #                 status = result.get("status", "UNKNOWN")
+#    #                 started = result.get("startedAt")
+#    #                 finished = result.get("finishedAt")
+#    #                 message = result.get("message")
 
-                    pct = min(99, int((waited / max_seconds) * 100)) if status not in TERMINAL else 100
-                    ph_progress.progress(pct, text=f"Status: {status}")
+#    #                 pct = min(99, int((waited / max_seconds) * 100)) if status not in TERMINAL else 100
+#    #                 ph_progress.progress(pct, text=f"Status: {status}")
 
-                    ph_status.info(f"**Status:** {status}")
-                    meta_lines = []
-                    if started: meta_lines.append(f"**Started:** {started}")
-                    if finished: meta_lines.append(f"**Finished:** {finished}")
-                    if message: meta_lines.append(f"**Message:** {message}")
-                    ph_meta.markdown("\n\n".join(meta_lines) if meta_lines else "_No extra details yet…_")
+#    #                 ph_status.info(f"**Status:** {status}")
+#    #                 meta_lines = []
+#    #                 if started: meta_lines.append(f"**Started:** {started}")
+#    #                 if finished: meta_lines.append(f"**Finished:** {finished}")
+#    #                 if message: meta_lines.append(f"**Message:** {message}")
+#    #                 ph_meta.markdown("\n\n".join(meta_lines) if meta_lines else "_No extra details yet…_")
 
-                    if status in TERMINAL:
-                        if status == "SUCCESS":
-                            st.success("Pipeline completed successfully ✅")
-                        elif status == "FAILED":
-                            st.error("Pipeline failed ❌")
-                        else:
-                            st.warning("Pipeline terminated ⚠️")
-                        ph_progress.progress(100, text=f"Status: {status}")
-                        break
+#    #                 if status in TERMINAL:
+#    #                     if status == "SUCCESS":
+#    #                         st.success("Pipeline completed successfully ✅")
+#    #                     elif status == "FAILED":
+#    #                         st.error("Pipeline failed ❌")
+#    #                     else:
+#    #                         st.warning("Pipeline terminated ⚠️")
+#    #                     ph_progress.progress(100, text=f"Status: {status}")
+#    #                     break
 
-                    time.sleep(poll_every)
-                    waited += poll_every
-                except requests.HTTPError as e:
-                    st.error(f"Status check failed: {e.response.text if e.response is not None else e}")
-                    break
-                except Exception as e:
-                    st.error(f"Status check failed: {e}")
-                    break
+#    #                 time.sleep(poll_every)
+#    #                 waited += poll_every
+#    #             except requests.HTTPError as e:
+#    #                 st.error(f"Status check failed: {e.response.text if e.response is not None else e}")
+#    #                 break
+#    #             except Exception as e:
+#    #                 st.error(f"Status check failed: {e}")
+#    #                 break
 
-            if waited > max_seconds:
-                st.warning("Stopped monitoring after 5 minutes. Click **Start monitoring** to continue polling.")
+#    #         if waited > max_seconds:
+#    #             st.warning("Stopped monitoring after 5 minutes. Click **Start monitoring** to continue polling.")
 
-    st.subheader("Recent Executions")
-    results = recent_executions(project_id, pipeline_name, days=7, limit=200)
-    if results:
-        table = [{
-            "pipelineName": r.get("pipelineName"),
-            "status": r.get("status"),
-            "trigger": r.get("trigger"),
-            "startedAt": r.get("startedAt"),
-            "finishedAt": r.get("finishedAt"),
-            "pipelineExecutionId": r.get("pipelineExecutionId"),
-        } for r in results]
-        st.dataframe(table, use_container_width=True, height=420)
-    else:
-        st.info("No executions found in the last 7 days.")
+#    # st.subheader("Recent Executions")
+#    # results = recent_executions(project_id, pipeline_name, days=7, limit=200)
+#    # if results:
+#    #     table = [{
+#    #         "pipelineName": r.get("pipelineName"),
+#    #         "status": r.get("status"),
+#    #         "trigger": r.get("trigger"),
+#    #         "startedAt": r.get("startedAt"),
+#    #         "finishedAt": r.get("finishedAt"),
+#    #         "pipelineExecutionId": r.get("pipelineExecutionId"),
+#    #     } for r in results]
+#    #     st.dataframe(table, use_container_width=True, height=420)
+#    # else:
+#    #     st.info("No executions found in the last 7 days.")
 
-    st.caption("Note: This page uses Matillion DPC public API endpoints to list published pipelines, execute them, poll status, and cancel runs.")
+    # st.caption("Note: This page uses Matillion DPC public API endpoints to list published pipelines, execute them, poll status, and cancel runs.")
 
 
 

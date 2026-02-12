@@ -376,17 +376,17 @@ def fetch_schedule_status_data():
             rh.END_TIME_PST AS END_TIME, 
             TIMESTAMPDIFF ('minute', START_TIME, END_TIME) AS TOTAL_RUNTIME_MINUTES, 
             upper (rh.STATE) as STATUS, 
-            rh. "message" as ERROR_MESSAGE,--'-' as TAG,
+            rh.MESSAGE as ERROR_MESSAGE,--'-' as TAG,
             rh.TASK_HISTORY_ID, rh.PROJECT_NAME,
             'MATILLION' AS SOURCE_TYPE,
             null as LINKS, null as TRIGGER_BY
             FROM EDW_LAB_DEV.OBSERVABILITY.RUN_HISTORY_SUMMARY rh
-            JOIN EDW_LAB_DEV.OBSERVABILITY.MATILLION_SCHEDULES_DETAILS sd
+            JOIN EDW_LAB_DEV.OBSERVABILITY.MATILLION_SCHEDULES_DETAILS_STG sd
             ON rh.PROJECT_NAME = sd.PROJECT AND
             rh.JOB_NAME = sd.JOB_NAME
-            and run_date= (select max (run_date) from EDW_LAB_DEV.OBSERVABILITY.matillion_schedules_details) 
+            and run_date= (select max (run_date) from EDW_LAB_DEV.OBSERVABILITY.MATILLION_SCHEDULES_DETAILS) 
             WHERE enabled=true and
-                rh.type in ('SCHEDULE ORCHESTRATION', 'QUEUE_ORCHESTRATION') --and rh.PROJECT_NAME = 'ZSCALER_BI_DWH' 
+                rh.JOBTYPE in ('SCHEDULE ORCHESTRATION', 'QUEUE_ORCHESTRATION') --and rh.PROJECT_NAME = 'ZSCALER_BI_DWH' 
                 and END_TIME >= DATEADD (hour, -24, CURRENT_TIMESTAMP) ORDER BY END_TIME DESC
     ),
     mat_final_cte as (
@@ -428,7 +428,7 @@ def fetch_schedule_status_data():
             LISTAGG(cc.comments, ', ') AS COMMENTS
     FROM
             combined_union cd
-    JOIN
+    LEFT JOIN
             EDW_LAB_DEV.OBSERVABILITY.JOBS_COMMENTS cc
     ON
             cd.TASK_HISTORY_ID = cc.run_id
@@ -477,15 +477,16 @@ def render_schedule_status_fragment():
     df, run_df, queue_df, fail_df, successful_jobs, failed_jobs, cancelled_jobs, running_jobs, queued_jobs = cached
     
     with st.container(border=False):
+        # header_col1,divider, header_col2 = st.columns([1,0.05, 1])
         st.markdown(
             f"""
         <div class="dashboard-box">
              <div>
                  <h1 class="hover-effect">
-                     Schedule Status Overview (24hrs)
+                    Schedule Status Overview (24hrs)
                  </h1>
             </div>
-            <div style="display:flex; flex-wrap:wrap; justify-content:left;">
+            <div class="status-card-container">
                 <div class="status-card status-success"><p>Success</p><h2 id="success">{successful_jobs}</h2></div>
                 <div class="status-card status-failed"><p>Failed</p><h2 id="failed">{failed_jobs}</h2></div>
                 <div class="status-card status-cancelled"><p>Cancelled</p><h2 id="cancelled">{cancelled_jobs}</h2></div>
@@ -583,8 +584,9 @@ def render_jobs_status_fragment(df, run_df, queue_df, fail_df):
             df_filtered = df_combined[((df_combined["SOURCE_TYPE"] == source_type_filter_val) | (source_type_filter_val == "ALL")) & ((df_combined["SCHEDULE_NAME"] == schedule_filter_val) | (schedule_filter_val == "ALL")) & ((df_combined["STATUS"] == status_filter_val) | (status_filter_val == "ALL"))]
 
         df_filtered = df_filtered.copy()
-        df_filtered["START_TIME"] = pd.to_datetime(df_filtered["START_TIME"]).dt.strftime("%B %d, %Y at %I:%M %p")
-        df_filtered["END_TIME"] = pd.to_datetime(df_filtered["END_TIME"]).dt.strftime("%B %d, %Y at %I:%M %p")
+        # Remove timezone info and convert to datetime
+        df_filtered["START_TIME"] = pd.to_datetime(df_filtered["START_TIME"], utc=True).dt.tz_localize(None).dt.strftime("%B %d, %Y at %I:%M %p")
+        df_filtered["END_TIME"] = pd.to_datetime(df_filtered["END_TIME"], utc=True).dt.tz_localize(None).dt.strftime("%B %d, %Y at %I:%M %p")
 
         column_config1 = {
             "PROJECT_NAME": st.column_config.Column(" PROJECT", help="PROJECT NAME", width="medium"),
@@ -924,7 +926,7 @@ def fetch_long_run_data():
                 rh.PROJECT_NAME = sd.PROJECT
                 AND rh.JOB_NAME = sd.JOB_NAME 
             WHERE
-                sd.ENABLED = 'TRUE' and (day_of_week=true or days_of_month is not null) and rh. STATE='SUCCESS' and rh.type = 'SCHEDULE ORCHESTRATION' and 
+                sd.ENABLED = 'TRUE' and (day_of_week=true or days_of_month is not null) and rh. STATE='SUCCESS' and rh.JOBTYPE = 'SCHEDULE ORCHESTRATION' and 
                 rh.START_TIME_PST IS NOT NULL 
                 AND rh.END_TIME_PST IS NOT NULL
         ),
@@ -1084,148 +1086,262 @@ def avg_schedule_lag():
         st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">',unsafe_allow_html=True)
 
 def fetch_upcoming_idle_data():
-    """Loader for upcoming schedules and idle time data (fresh on each reload)."""
-    up_sch='''
-   WITH FlattenedSchedules AS (
-        SELECT
-            sd.name AS SCHEDULE_NAME,
-            sd.run_date,
-            sd.minute,
-            C.value::int AS RUN_HOUR,
-            TO_TIMESTAMP_LTZ (sd.run_date ||' '||LPAD (C.value, 2, '0') ||':' || LPAD (sd.minute, 2, '0') || ':00', 'YYYY-MM-DD HH24:MI:SS') AS START_RUN_TIME
-        FROM
-            EDW_LAB_DEV.OBSERVABILITY.matillion_schedules_details sd,
-            LATERAL FLATTEN (input => split (sd. hour, ',')) C
-        WHERE
-            sd.enabled = true
-            AND (sd.day_of_week =true or sd.days_of_month is not null)
-            AND sd.run_date = (SELECT MAX(run_date) FROM EDW_LAB_DEV.OBSERVABILITY.matillion_schedules_details)
-    )
+    """Fetch upcoming schedules (Matillion + DBT) and idle time, without filtering timestamps."""
 
-    SELECT
-        upper (SCHEDULE_NAME) SCHEDULE_NAME,
-        START_RUN_TIME,
-        'MATILLION' AS SOURCE_TYPE
-    FROM
-        FlattenedSchedules
-    WHERE
-        START_RUN_TIME > CURRENT_TIMESTAMP()
-        AND DATE(START_RUN_TIME) <= CURRENT_DATE+1 --AND DATE (START_RUN_TIME) <= CURRENT_DATE+1
-        -- START_RUN_TIME >= CONVERT_TIMEZONE('UTC', 'America/Los_Angeles', CURRENT_TIMESTAMP)
+    import pandas as pd
 
-    UNION ALL
-    SELECT
-        upper (NAME) AS SCHEDULE_NAME,
-        CONVERT_TIMEZONE ('UTC', 'America/Los_Angeles', NEXT_RUN) AS START_RUN_TIME,
-        SOURCE_TYPE
-    FROM
-        EDW_LAB_DEV.OBSERVABILITY.DBT_SCHEDULES
-    WHERE
-        CONVERT_TIMEZONE ('UTC', 'America/Los_Angeles', NEXT_RUN) > CONVERT_TIMEZONE('UTC', 'America/Los_Angeles', CURRENT_TIMESTAMP())
-        AND CONVERT_TIMEZONE('UTC', 'America/Los_Angeles', NEXT_RUN) <= CONVERT_TIMEZONE('UTC', 'America/Los_Angeles', DATEADD (hour, 24, CURRENT_TIMESTAMP())) 
-        AND JOB_TYPE = 'scheduled'
-    ORDER by start_run_time asc;
-    '''
+    # --- Matillion schedules ---
+    try:
+        mat_df = session.sql("""
+            SELECT
+                NAME AS SCHEDULE_NAME,
+                NULL AS RUN_TIME,
+                'MATILLION' AS SOURCE
+            FROM EDW_LAB_DEV.OBSERVABILITY.MATILLION_SCHEDULES_DETAILS_STG
+        """).to_pandas()
+    except Exception as e:
+        st.error(f"Error fetching Matillion schedules: {e}")
+        mat_df = pd.DataFrame(columns=["SCHEDULE_NAME", "RUN_TIME", "SOURCE"])
 
-    idle_query='''
-        SELECT
-            Last_end_time AS FROM_DATETIME, 
-            next_start_time AS TO_DATETIME,
-            --idle_seconds 60 AS idle_minutes
-        FROM
-            (
+    # --- DBT schedules ---
+    try:
+        dbt_df = session.sql("""
+            SELECT
+                NAME AS SCHEDULE_NAME,
+                NULL AS RUN_TIME,
+                'DBT' AS SOURCE
+            FROM EDW_LAB_DEV.OBSERVABILITY.DBT_SCHEDULES
+        """).to_pandas()
+    except Exception as e:
+        st.error(f"Error fetching DBT schedules: {e}")
+        dbt_df = pd.DataFrame(columns=["SCHEDULE_NAME", "RUN_TIME", "SOURCE"])
+
+    # --- Combine both ---
+    combined_df = pd.concat([mat_df, dbt_df], ignore_index=True)
+
+    # --- Idle time ---
+    try:
+        idle_df = session.sql("""
+            SELECT
+                Last_end_time AS FROM_DATETIME,
+                next_start_time AS TO_DATETIME,
+                ROUND(TIMESTAMPDIFF('minute', Last_end_time, next_start_time), 2) AS IDLE_TIME_MINUTES
+            FROM (
                 SELECT
                     END_TIME_PST AS last_end_time,
-                    LEAD (END_TIME_PST) OVER (ORDER BY END_TIME_PST) AS next_start_time,
-                    TIMESTAMPDIFF('second', END_TIME_PST, LEAD (END_TIME_PST) OVER (ORDER BY END_TIME_PST)) AS idle_seconds
-                FROM
-                    EDW_LAB_DEV.OBSERVABILITY.RUN_HISTORY_SUMMARY
-                WHERE
-                    END_TIME_PST >= CONVERT_TIMEZONE('UTC', 'America/Los_Angeles', CURRENT_TIMESTAMP) - INTERVAL '1 day' 
-                    AND STATE = 'SUCCESS'
-            ) AS idle_time
-        WHERE
-            idle_seconds / 60 >= 6
-            AND next_start_time >= DATEADD (hour, -24, CURRENT_TIMESTAMP)
-        ORDER BY
-            Last_end_time DESC;
-        '''
-    
-    upcoming_schedules_df = session.sql(up_sch).to_pandas()
-    idle_df = session.sql(idle_query).to_pandas()
-    
-    return upcoming_schedules_df, idle_df
+                    LEAD(END_TIME_PST) OVER (ORDER BY END_TIME_PST) AS next_start_time,
+                    TIMESTAMPDIFF('second', END_TIME_PST, LEAD(END_TIME_PST) OVER (ORDER BY END_TIME_PST)) AS idle_seconds
+                FROM EDW_LAB_DEV.OBSERVABILITY.RUN_HISTORY_SUMMARY
+                WHERE END_TIME_PST >= DATEADD('hour', -24, CURRENT_TIMESTAMP())
+                    AND STATE='SUCCESS'
+            )
+            WHERE next_start_time IS NOT NULL
+            ORDER BY Last_end_time DESC
+        """).to_pandas()
+    except Exception as e:
+        st.error(f"Error fetching idle time: {e}")
+        idle_df = pd.DataFrame(columns=["FROM_DATETIME", "TO_DATETIME", "IDLE_TIME_MINUTES"])
+
+    return combined_df, idle_df
+
+
+# def debug_schedule_tables():
+#     """Debug function to show what's actually in the schedule tables."""
+#     with st.expander("🔍 DEBUG: Matillion & DBT Schedule Tables"):
+#         col1, col2 = st.columns(2)
+        
+#         with col1:
+#             st.subheader("Matillion Schedules Details (Raw)")
+#             try:
+#                 mat_debug = '''
+#                 SELECT 
+#                     name, 
+#                     enabled, 
+#                     run_date,
+#                     hour,
+#                     minute,
+#                     day_of_week,
+#                     days_of_month,
+#                     PROJECT
+#                 FROM EDW_LAB_DEV.OBSERVABILITY.MATILLION_SCHEDULES_DETAILS_STG
+#                 ORDER BY name ASC
+#                 LIMIT 20;
+#                 '''
+#                 mat_df = session.sql(mat_debug).to_pandas()
+#                 st.write(f"**Total records: {len(mat_df)}**")
+#                 st.dataframe(mat_df, use_container_width=True)
+#             except Exception as e:
+#                 st.error(f"Error: {str(e)}")
+        
+#         with col2:
+#             st.subheader("DBT Schedules (Raw)")
+#             try:
+#                 dbt_debug = '''
+#                 SELECT 
+#                     NAME,
+#                     NEXT_RUN,
+#                     JOB_TYPE,
+#                     SOURCE_TYPE,
+#                     PROJECT_ID
+#                 FROM EDW_LAB_DEV.OBSERVABILITY.DBT_SCHEDULES
+#                 ORDER BY NAME ASC
+#                 LIMIT 20;
+#                 '''
+#                 dbt_df = session.sql(dbt_debug).to_pandas()
+#                 st.write(f"**Total records: {len(dbt_df)}**")
+#                 st.dataframe(dbt_df, use_container_width=True)
+#             except Exception as e:
+#                 st.error(f"Error: {str(e)}")
+        
+#         # Show what the flattened query returns
+#         st.subheader("Matillion - Flattened (from hour split)")
+#         try:
+#             flatten_test = '''
+#             SELECT
+#                 sd.name AS SCHEDULE_NAME,
+#                 sd.run_date,
+#                 sd.minute,
+#                 sd.hour,
+#                 C.value::int AS RUN_HOUR,
+#                 TO_TIMESTAMP_LTZ(sd.run_date ||' '||LPAD(C.value, 2, '0') ||':' || LPAD(sd.minute, 2, '0') || ':00', 'YYYY-MM-DD HH24:MI:SS') AS START_RUN_TIME_UTC,
+#                 CONVERT_TIMEZONE('UTC', 'America/Los_Angeles', TO_TIMESTAMP_LTZ(sd.run_date ||' '||LPAD(C.value, 2, '0') ||':' || LPAD(sd.minute, 2, '0') || ':00', 'YYYY-MM-DD HH24:MI:SS')) AS START_RUN_TIME
+#             FROM
+#                 EDW_LAB_DEV.OBSERVABILITY.MATILLION_SCHEDULES_DETAILS_TEMP sd,
+#                 LATERAL FLATTEN(input => SPLIT(sd.hour, ',')) C
+#             WHERE
+#                 sd.enabled = 'TRUE'
+#             ORDER BY sd.name
+#             LIMIT 50;
+#             '''
+#             flatten_df = session.sql(flatten_test).to_pandas()
+#             st.write(f"**Total flattened records: {len(flatten_df)}**")
+#             st.write(f"**Current timestamp (for comparison):** {pd.Timestamp.now(tz='UTC').tz_convert('America/Los_Angeles')}")
+#             st.dataframe(flatten_df, use_container_width=True)
+#         except Exception as e:
+#             st.error(f"Error: {str(e)}")
 
 
 @st.fragment
 def upcoming_sch_idle_time():
-    """Fragment: Upcoming Schedules & Matillion Idle Time - cached data, no filters."""
-    # Load cached data once
-    if 'upcoming_idle_data' not in st.session_state:
-        with st.spinner('Loading upcoming schedules and idle time...'):
-            st.session_state['upcoming_idle_data'] = fetch_upcoming_idle_data()
-    
-    upcoming_schedules_df, idle_df = st.session_state['upcoming_idle_data']
 
-    with st.container(border=False):
-        st.markdown(
+    # st.write("DEBUG: fragment executed")
+
+    if "combined_schedules" not in st.session_state:
+        with st.spinner("Loading upcoming schedules..."):
+            # Matillion: fetch schedules with calculation logic
+            matillion_sql = """
+            SELECT
+                upper(NAME) AS SCHEDULE_NAME,
+                ENABLED,
+                HOUR,
+                MINUTE,
+                RUN_DATE
+            FROM EDW_LAB_DEV.OBSERVABILITY.MATILLION_SCHEDULES_DETAILS_STG
             """
-                <div style="text-align: left;">
-                    <h1 class="hover-effect">
-                        Upcoming Schedules
-                    </h1>
-                </div>
-                """,
-            unsafe_allow_html=True,
-        )
-        column_config = {
-            "SCHEDULE_NAME": st.column_config.Column(
-                "SCHEDULE NAME", help="SCHEDULE NAME", width="medium"
-            ),
-            "SOURCE_TYPE": st.column_config.Column(
-                "SOURCE TYPE", help="SOURCE TYPE", width="medium"
-            ),
-            "START_RUN_TIME": st.column_config.Column(
-                "START RUN TIME (PST)", help="START RUN TIME (PST)", width="medium"
-            ),
-        }
-        st.dataframe(
-            upcoming_schedules_df,
-            column_config=column_config,
-            use_container_width=True,
-            hide_index=True,
-        )
 
-    st.markdown('<hr style="border:0.5px grey; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);">',unsafe_allow_html=True)
-    
+            matillion_df = session.sql(matillion_sql).to_pandas()
+            
+            # Calculate NEXT_RUN_TIME in Python
+            def calculate_next_run(row):
+                try:
+                    # Check if enabled and has valid hour/minute
+                    if str(row['ENABLED']).lower() != 'true':
+                        return None
+                    
+                    # Try to extract hour and minute (handle comma-separated values)
+                    hour_str = str(row['HOUR']).strip()
+                    minute_str = str(row['MINUTE']).strip()
+                    
+                    # If multiple values (comma-separated), take the first one
+                    if ',' in hour_str:
+                        hour_str = hour_str.split(',')[0].strip()
+                    if ',' in minute_str:
+                        minute_str = minute_str.split(',')[0].strip()
+                    
+                    # Try to convert to numbers
+                    try:
+                        hour = int(hour_str)
+                        minute = int(minute_str)
+                    except (ValueError, TypeError):
+                        return None
+                    
+                    # Validate ranges
+                    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+                        return None
+                    
+                    # Calculate next run time
+                    from datetime import datetime, timedelta
+                    now = datetime.now()
+                    next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+                    
+                    # If that time has already passed today, schedule for tomorrow
+                    if next_run <= now:
+                        next_run = next_run + timedelta(days=1)
+                    
+                    return next_run
+                except Exception:
+                    return None
+            
+            matillion_df['RUN_TIME'] = matillion_df.apply(calculate_next_run, axis=1)
+            matillion_df['SOURCE'] = 'MATILLION'
+            
+            # Keep only necessary columns
+            combined_df = matillion_df[['SCHEDULE_NAME', 'RUN_TIME', 'SOURCE']].copy()
+            combined_df = combined_df.sort_values("SCHEDULE_NAME")
+
+            st.session_state["combined_schedules"] = combined_df
+
+    combined_df = st.session_state["combined_schedules"]
+
     st.markdown(
         """
-                <div style="text-align: left;">
-                    <h1 class="hover-effect">
-                        Matillion Idle Time(24hrs)
-                    </h1>
-                </div>
-                """,
+        <div style="text-align: left;">
+            <h1 class="hover-effect">
+                Upcoming Schedules (Matillion)
+            </h1>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
-    column_config1 = {
-        "FROM_DATETIME": st.column_config.Column("FROM DATETIME (PST)", width="medium"),
-        "TO_DATETIME": st.column_config.Column("TO DATETIME (PST)", width="medium"),
+
+    if combined_df.empty:
+        st.info("No upcoming schedules found.")
+        return
+
+    # Filter out schedules with no run time
+    combined_df_filtered = combined_df.dropna(subset=['RUN_TIME'])
+    
+    if combined_df_filtered.empty:
+        st.warning("No schedules with valid run times found.")
+        return
+
+    column_config = {
+        "SCHEDULE_NAME": st.column_config.Column(
+            "SCHEDULE NAME", width="medium"
+        ),
+        "RUN_TIME": st.column_config.Column(
+            "NEXT RUN TIME (PST)", width="medium"
+        ),
+        "SOURCE": st.column_config.Column(
+            "SOURCE", width="small"
+        ),
     }
+
     st.dataframe(
-        idle_df, column_config=column_config1, use_container_width=True, hide_index=True
+        combined_df_filtered,
+        column_config=column_config,
+        use_container_width=True,
+        hide_index=True,
     )
+
 
 #main
 #main
 # spinner_placeholder=st.empty()
-with st.spinner ('Loading, please wait...'):
-    #st.session_state.spinner_text='Loading dataframe and charts...'
-    #spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading dataframe and charts...</p>", unsafe_allow_html=True) 
-    cl1, cl2, cl3 = st.columns ([4,1,1])
-    with cl3:
-        #st.image("assets/logo_cloudeqs.png", width=200)
-        st.image("./assets/logo_cloudeqs.png", width=200)
+# with st.container(border=False):
+#     cl1, cl2, cl3 = st.columns ([4,1,1])
+#     with cl3:
+#         st.image("assets/logo_cloudeqs.png", width=200)
 
 
 dbt_schedules_api()
@@ -1236,4 +1352,5 @@ schedule_lag_df ()
 # spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading matillion idle time data...</p>", unsafe_allow_html=True) 
 avg_schedule_lag()
 upcoming_sch_idle_time()
+# debug_schedule_tables()
 # spinner_placeholder.markdown ("")

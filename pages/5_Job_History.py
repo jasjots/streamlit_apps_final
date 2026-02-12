@@ -11,9 +11,10 @@ import math
 import time as ti
 import pytz
 from datetime import datetime, date, time, timedelta, timezone 
-st.set_page_config(page_title="Job Logs Dashboard", layout="wide")
+
 
 session=session()
+
 
 st.set_page_config(
     page_title="Job Logs Dashboard",
@@ -30,6 +31,7 @@ load_css("CSS/job.css")
 
 from sidebar import render_sidebar
 render_sidebar()
+
 def convert_to_pst(epoch_time):
     utc_time = datetime.fromtimestamp (epoch_time / 1000, tz=pytz.utc) 
     pst_timezone = pytz.timezone ('America/Los_Angeles')
@@ -182,7 +184,7 @@ def create_history_data(from_date_time):
         with cte_mat_temp as(
             SELECT sd.name as SCHEDULE_NAME, upper(rh.job_name) JOB_TAG_NAME, DAYOFWEEK(rh.START_TIME_PST),
                 rh.START_TIME_PST AS START_TIME, rh.END_TIME_PST AS END_TIME, TIMESTAMPDIFF('minute',START_TIME, END_TIME) AS TOTAL_RUNTIME_MINUTES, 
-                upper(rh.STATE) as STATUS, rh."message" as ERROR_MESSAGE,
+                upper(rh.STATE) as STATUS, rh.MESSAGE as ERROR_MESSAGE,
                 rh. TASK_HISTORY_ID, rh. PROJECT_NAME,
                 'MATILLION' AS SOURCE_TYPE,
                 null as LINKS, null as TRIGGER_BY
@@ -192,7 +194,7 @@ def create_history_data(from_date_time):
                 rh.JOB_NAME = sd.JOB_NAME
                 and run_date=(select max(run_date) from EDW_LAB_DEV.OBSERVABILITY.matillion_schedules_details)
             WHERE enabled=true and
-                rh.type in ('SCHEDULE_ORCHESTRATION', 'QUEUE_ORCHESTRATION') and rh.PROJECT_NAME='ZSCALER_BI_DWH' 
+                rh.JOBTYPE in ('SCHEDULE_ORCHESTRATION', 'QUEUE_ORCHESTRATION') and rh.PROJECT_NAME='ZSCALER_BI_DWH' 
                 and END_TIME >= DATEADD (hour, -360, CURRENT_TIMESTAMP)
             ORDER BY END_TIME DESC
         ),
@@ -332,7 +334,7 @@ def history_job_data(from_date_time):
         cte_mat_temp as(
             SELECT sd.name as SCHEDULE_NAME, upper(rh.job_name) JOB_TAG_NAME,  DAYOFWEEK (rh.START_TIME_PST),
                 rh.START_TIME_PST AS START_TIME, rh.END_TIME_PST AS END_TIME, TIMESTAMPDIFF('minute',START_TIME, END_TIME) AS TOTAL_RUNTIME_MINUTES, 
-                upper(rh.STATE) as STATUS, rh."message" as ERROR_MESSAGE,
+                upper(rh.STATE) as STATUS, rh.MESSAGE as ERROR_MESSAGE,
                 rh.TASK_HISTORY_ID, rh.PROJECT_NAME, 
                 'MATILLION' AS SOURCE_TYPE,
                 null as LINKS, null as TRIGGER_BY
@@ -342,7 +344,7 @@ def history_job_data(from_date_time):
                 rh.JOB_NAME = sd.JOB_NAME
                 and run_date=(select max(run_date) from EDW_LAB_DEV.OBSERVABILITY.matillion_schedules_details) 
                 WHERE enabled=true and 
-                rh.type in  ('SCHEDULE_ORCHESTRATION','QUEUE_ORCHESTRATION' ) and rh.PROJECT_NAME='ZSCALER_BI_DWH'
+                rh.JOBTYPE in  ('SCHEDULE_ORCHESTRATION','QUEUE_ORCHESTRATION' ) and rh.PROJECT_NAME='ZSCALER_BI_DWH'
                     and END_TIME < DATEADD(hour, -168, CURRENT_TIMESTAMP)
                 ORDER BY END_TIME DESC
         ),
@@ -383,170 +385,291 @@ def history_job_data(from_date_time):
     df['END_TIME'] = pd.to_datetime(df['END_TIME']).dt.tz_localize(None)
     return df
 
+from_date_time = '2025-05-01'
+history_df=create_history_data(from_date_time)
+mat_latest_data=mat_running_run_and_queue()
 
-def fetch_all_job_history_data():
-    """Loader - executes all SQL queries to fetch latest job history data."""
-    from_date_time = '2025-05-01'
-    # Load all data sources
-    history_df = create_history_data(from_date_time)
-    mat_latest_data = mat_running_run_and_queue()
-    mat_data = pd.concat([mat_latest_data, history_df], ignore_index=True)
-    
-    # Load failed jobs
-    gmt_end_time = datetime.now(timezone.utc)
-    gmt_start_time = datetime.now(timezone.utc) - timedelta(hours=24)
-    dbt_api_failed_df = dbt_failed_jobs(20, gmt_start_time, gmt_end_time)
-    dbt_failed_df = failed_dbt_data()
-    dbt_failed_df = pd.concat([dbt_failed_df, dbt_api_failed_df], ignore_index=True)
-    dbt_failed_df = dbt_failed_df.drop_duplicates(subset=['TASK_HISTORY_ID'])
-    
-    # Combine all data
-    history_df = pd.concat([dbt_failed_df, mat_data], ignore_index=True)
-    history_df.loc[history_df['STATUS'].str.contains("FAILED ERROR", case=False), 'STATUS'] = "FAILED"
-    history_df['PROJECT_NAME'] = history_df['PROJECT_NAME'].str.upper()
-    
-    return history_df
+mat_data=pd.concat([mat_latest_data, history_df], ignore_index=True)
 
 
-@st.fragment
-def render_job_history_fragment():
-    """Fragment UI with session state filters for job history."""
-    
-    # Initialize session state for filters
-    if 'job_history_filters' not in st.session_state:
-        st.session_state.job_history_filters = {
-            'from_date': date(2025, 5, 1),
-            'from_time': time(0, 0),
-            'to_date': date.today(),
-            'to_time': time(23, 59),
-            'source_type': 'All',
-            'project_name': 'All',
-            'job_name': 'All',
-            'status': 'All'
-        }
-    
-    def _update_filters():
-        st.session_state.job_history_filters['from_date'] = st.session_state.from_date_picker
-        st.session_state.job_history_filters['from_time'] = st.session_state.from_time_picker
-        st.session_state.job_history_filters['to_date'] = st.session_state.to_date_picker
-        st.session_state.job_history_filters['to_time'] = st.session_state.to_time_picker
-        st.session_state.job_history_filters['source_type'] = st.session_state.source_type_select
-        st.session_state.job_history_filters['project_name'] = st.session_state.project_name_select
-        st.session_state.job_history_filters['job_name'] = st.session_state.job_name_select
-        st.session_state.job_history_filters['status'] = st.session_state.status_select
-    
-    # Header
-    with st.container(border=False):
-        st.markdown(
-            """
-            <div>
-                <h1 style="font-family: Inter, sans-serif; font-size: 22px; text-align: left;">
-                    Job History Details
-                </h1>
-            </div>
-            """, unsafe_allow_html=True
+# spinner_placeholder=st.empty()
+# with st.spinner ('Loading, please wait...'):
+    #st.session_state.spinner_text='Loading dataframe and charts...'
+    #spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading dataframe and charts...</p>", unsafe_allow_html=True) 
+    # cl1, cl2, cl3 = st.columns ([4,1,1])
+    # with cl3:
+    #     st.image("assets/logo_cloudeqs.png", width=200)
+
+
+
+
+with st.container(border=False):
+    st.markdown(
+        """
+        <div>
+            <h1 class="hover-effect">
+                Job History Details
+            </h1>
+        </div>
+        """, unsafe_allow_html=True
+    )
+
+
+local_time = ti.localtime()
+gmt_end_time = datetime.now(timezone.utc)
+gmt_start_time = datetime.now(timezone.utc)-timedelta(hours=24)
+
+dbt_api_failed_df = dbt_failed_jobs(20, gmt_start_time, gmt_end_time) 
+dbt_failed_df=failed_dbt_data()
+
+dbt_failed_df=pd.concat([dbt_failed_df, dbt_api_failed_df], ignore_index=True) 
+dbt_failed_df=dbt_failed_df.drop_duplicates(subset=['TASK_HISTORY_ID'])
+
+history_df=pd.concat([dbt_failed_df, mat_data], ignore_index=True) 
+#history_df = history_df.dropna (subset=['START_TIME', 'END_TIME'])
+history_df.loc[history_df['STATUS'].str.contains("FAILED ERROR", case=False), 'STATUS'] = "FAILED"
+history_df[ 'PROJECT_NAME']=history_df[ 'PROJECT_NAME'].str.upper() 
+button=False
+
+with st.form(key='my_form'):
+
+    row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
+
+    with row1_col1:
+        from_datetime = pd.to_datetime(history_df['START_TIME'].unique().max())
+        from_date = date.fromisoformat(str(st.date_input("Select From Date", from_datetime.date())))
+
+    with row1_col2:
+        from_time = time.fromisoformat(str(st.time_input("Select From Time", time(0, 0))))
+        from_date_time_filter = datetime.combine(from_date, from_time).strftime('%Y-%m-%d %H:%M:%S.000')
+
+    with row1_col3:
+        to_datetime = pd.to_datetime(history_df['END_TIME'].unique().max())
+        to_date = date.fromisoformat(str(st.date_input("Select To Date", to_datetime.date())))
+
+    with row1_col4:
+        to_time = time.fromisoformat(str(st.time_input("Select To Time", to_datetime.time())))
+        to_date_time_filter = datetime.combine(to_date, to_time)
+
+
+    row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
+
+    with row2_col1:
+        source_type_filter = st.selectbox("Select Source Type", ["All"] + list(history_df['SOURCE_TYPE'].unique()))
+
+    with row2_col2:
+        project_names = [p for p in history_df['PROJECT_NAME'].unique()]
+        project_name_filter = st.selectbox("Select Project Name", ["All"] + project_names)
+
+    with row2_col3:
+        job_name_filter = st.text_input("Enter Schedule Name")
+
+    with row2_col4:
+        status_filter = st.selectbox("Select Status", ["All", "SUCCESS", "FAILED", "CANCELLED"])
+
+    s1, s2 = st.columns([10, 1])
+    with s2:
+        button = st.form_submit_button(label="Search", use_container_width=True)
+
+
+if button:
+    history_data = history_job_data(from_date_time_filter)
+    history_df = pd.concat([history_df, history_data], ignore_index=True)
+
+    # Ensure datetime types
+    history_df["START_TIME"] = pd.to_datetime(history_df["START_TIME"], errors="coerce")
+    history_df["END_TIME"]   = pd.to_datetime(history_df["END_TIME"], errors="coerce")
+
+    filtered_df = history_df[
+        (history_df["START_TIME"] >= from_date_time_filter) &
+        (history_df["END_TIME"] <= to_date_time_filter)
+    ]
+
+    if source_type_filter != "All":
+        filtered_df = filtered_df[filtered_df['SOURCE_TYPE'] == source_type_filter]
+
+    if project_name_filter != "All":
+        filtered_df = filtered_df[filtered_df['PROJECT_NAME'] == project_name_filter]
+
+    if status_filter != "All":
+        filtered_df = filtered_df[filtered_df['STATUS'] == status_filter]
+
+    if job_name_filter:
+        filtered_df = filtered_df[
+            filtered_df['SCHEDULE_NAME'].str.contains(job_name_filter, case=False, na=False)
+        ]
+
+    if 'LINKS' not in filtered_df.columns:
+        filtered_df['LINKS'] = ""
+
+    filtered_df['LINKS'] = filtered_df.apply(
+        lambda row: f"https://13.90.90.241:8443/#CLOUDX/{row['PROJECT_NAME']}/default/{row['SCHEDULE_NAME']}/run/{row['TASK_HISTORY_ID']}"
+        if row['SOURCE_TYPE'] == "MATILLION" else row['LINKS'],
+        axis=1
+    )
+
+    filtered_df = filtered_df.sort_values(by='START_TIME', ascending=False)
+
+    columns_to_display = ['SCHEDULE_NAME','JOB_TAG_NAME','START_TIME','END_TIME',
+                          'TOTAL_RUNTIME_MINUTES','TASK_HISTORY_ID','STATUS',
+                          'ERROR_MESSAGE','PROJECT_NAME','SOURCE_TYPE','LINKS','TRIGGER_BY']
+
+    filtered_df = filtered_df[columns_to_display]
+
+    # ✅ SAVE NEW FILTERED DATA EVERY TIME
+    st.session_state.filtered_df = filtered_df
+    st.session_state.page_number = 1
+
+
+        # Initialize page number ONCE
+if "filtered_df" in st.session_state and not st.session_state.filtered_df.empty:
+    filtered_df = st.session_state.filtered_df
+    rows_per_page = 200
+    total_pages = math.ceil(len(filtered_df) / rows_per_page)
+
+    col_page, col_spacer = st.columns([1, 3])
+    with col_page:
+        st.number_input(
+            "Page",
+            min_value=1,
+            max_value=total_pages,
+            step=1,
+            key='page_number'
         )
-    
-    # Load data once (cached)
-    history_df = fetch_all_job_history_data()
-    
-    # Filter section
-    col1, col2, col3, col4 = st.columns(4)
+
+    # st.session_state.page_number = page_number
+    page_number = st.session_state.page_number
+    start_idx = (page_number - 1) * rows_per_page
+    end_idx = start_idx + rows_per_page
+    current_page_data = filtered_df.iloc[start_idx:end_idx]
+
+
+    column_config1={
+        "PROJECT_NAME": st.column_config.Column(
+            "PROJECT NAME",
+            help="Project Name",
+            width="medium"
+        ),
+        "SCHEDULE_NAME": st.column_config.Column(
+            "SCHEDULE NAME",
+            help="SCHEDULE NAME",
+            width="medium"
+        ),
+        "JOB_TAG_NAME": st.column_config.Column(
+            "JOB/TAG NAME",
+            help="J0B/TAG NAME",
+            width="medium"
+        ),
+        "START_TIME": st.column_config.Column(
+            "Start TIME (PST)",
+            help="Start TIME (PST)",
+            width="medium"
+        ),
+        "END_TIME": st.column_config.Column(
+            "END TIME (PST)",
+            help="END TIME (PST)",
+            width="medium"
+        ),
+        "TOTAL_RUNTIME_MINUTES": st.column_config.Column(
+            "TOTAL RUNTIME (MINS)",
+            help="TOTAL RUNTIME (MINS)",
+            width="medium"
+        ),
+        "ERROR_MESSAGE": st.column_config.Column(
+            "ERROR MESSAGE",
+            help="ERROR MESSAGE",
+            width="medium"
+        ),
+        "TASK_HISTORY_ID": st.column_config.Column(
+            "TASK HISTORY ID",
+            help="TASK HISTORY ID",
+            width="medium"
+        ),
+        "SOURCE_TYPE": st.column_config.Column(
+            "SOURCE TYPE",
+            help="SOURCE TYPE",
+            width="medium"
+        ),
+        "LINKS": st.column_config.LinkColumn( 
+            "LINKS",
+            help="LINKS",
+            width="medium", 
+            display_text="Details",
+        ),
+        "LINK_TEXT": st.column_config.TextColumn(
+            "Details",  # Column that shows 'Details' as the clickable text
+            help="Link text"
+        )
+    }  
+    def color_survived(val):
+        if val == 'SUCCESS':
+            color = '#5b85fb'  
+        elif val == 'FAILED':
+            color = '#f26271'
+        elif val == 'CANCELLED':
+            color = '#feb746'
+        elif val == 'RUNNING':
+            color = '#61d7a1'
+        elif val == 'QUEUED':
+            color= '#fee8c6'
+        else:
+            color='white'
+        return f'background-color: {color}'
+    current_page_data=current_page_data.style.applymap(color_survived, subset=['STATUS'])
+    # st.dataframe(df_filtered, column_config = column_config1, hide_index=True)
+    st.dataframe(current_page_data,column_config = column_config1 ,key='TASK_HISTORY_ID', use_container_width=True,hide_index=True)    
+    # Display current page info
+
+
+    p1,p2=st.columns([4,0.5])
+    with p2:
+        st.write(f"Page {page_number} of {total_pages}")
+
+    colors = {'SUCCESS': 'darkgreen', 'FAILED': 'red', 'CANCELLED': 'yellow', 'SKIPPED':'light_blue',"_default": "orange"} 
+    col1, col2 =st.columns(2)
     with col1:
-        st.date_input("From Date", value=st.session_state.job_history_filters['from_date'], key='from_date_picker', on_change=_update_filters)
-    with col2:
-        st.time_input("From Time", value=st.session_state.job_history_filters['from_time'], key='from_time_picker', on_change=_update_filters)
-    with col3:
-        st.date_input("To Date", value=st.session_state.job_history_filters['to_date'], key='to_date_picker', on_change=_update_filters)
-    with col4:
-        st.time_input("To Time", value=st.session_state.job_history_filters['to_time'], key='to_time_picker', on_change=_update_filters)
-    
-    col5, col6, col7, col8 = st.columns(4)
-    source_types = ['All'] + sorted(history_df['SOURCE_TYPE'].dropna().unique().tolist())
-    project_names = ['All'] + sorted(history_df['PROJECT_NAME'].dropna().unique().tolist())
-    job_names = ['All'] + sorted(history_df['SCHEDULE_NAME'].dropna().unique().tolist())
-    statuses = ['All'] + sorted(history_df['STATUS'].dropna().unique().tolist())
-    
-    with col5:
-        st.selectbox("Source Type", source_types, index=source_types.index(st.session_state.job_history_filters['source_type']), key='source_type_select', on_change=_update_filters)
-    with col6:
-        st.selectbox("Project", project_names, index=project_names.index(st.session_state.job_history_filters['project_name']) if st.session_state.job_history_filters['project_name'] in project_names else 0, key='project_name_select', on_change=_update_filters)
-    with col7:
-        st.selectbox("Job Name", job_names, index=job_names.index(st.session_state.job_history_filters['job_name']) if st.session_state.job_history_filters['job_name'] in job_names else 0, key='job_name_select', on_change=_update_filters)
-    with col8:
-        st.selectbox("Status", statuses, index=statuses.index(st.session_state.job_history_filters['status']) if st.session_state.job_history_filters['status'] in statuses else 0, key='status_select', on_change=_update_filters)
-    
-    # Apply local filters
-    filtered_df = history_df.copy()
-    
-    # Date/time filtering
-    from_datetime = datetime.combine(st.session_state.job_history_filters['from_date'], st.session_state.job_history_filters['from_time'])
-    to_datetime = datetime.combine(st.session_state.job_history_filters['to_date'], st.session_state.job_history_filters['to_time'])
-    filtered_df = filtered_df[(filtered_df['START_TIME'] >= from_datetime) & (filtered_df['START_TIME'] <= to_datetime)]
-    
-    # Other filters
-    if st.session_state.job_history_filters['source_type'] != 'All':
-        filtered_df = filtered_df[filtered_df['SOURCE_TYPE'] == st.session_state.job_history_filters['source_type']]
-    if st.session_state.job_history_filters['project_name'] != 'All':
-        filtered_df = filtered_df[filtered_df['PROJECT_NAME'] == st.session_state.job_history_filters['project_name']]
-    if st.session_state.job_history_filters['job_name'] != 'All':
-        filtered_df = filtered_df[filtered_df['SCHEDULE_NAME'] == st.session_state.job_history_filters['job_name']]
-    if st.session_state.job_history_filters['status'] != 'All':
-        filtered_df = filtered_df[filtered_df['STATUS'] == st.session_state.job_history_filters['status']]
-    
-    # Display results
-    if not filtered_df.empty:
-        st.dataframe(filtered_df, use_container_width=True)
-        
-        # Pagination
-        page_size = 10
-        total_pages = (len(filtered_df) + page_size - 1) // page_size
-        page = st.number_input("Page", min_value=1, max_value=max(1, total_pages), value=1) - 1
-        
-        start_idx = page * page_size
-        end_idx = min(start_idx + page_size, len(filtered_df))
-        paginated_df = filtered_df.iloc[start_idx:end_idx]
-        
-        st.markdown(f"**Showing rows {start_idx + 1} to {end_idx} of {len(filtered_df)}**")
-        
-        # Job execution time chart
-        if st.session_state.job_history_filters['job_name'] != 'All':
-            job_name_filter = st.session_state.job_history_filters['job_name']
             st.markdown(
                 f"""
-                <div style="background-color: #F9FAFB; border-radius: 8px; padding: 12px; margin: 10px 0;">
-                    <div style="padding: 10px;">
-                        <h1 style="color: #5D6A85; margin: 0; font-size: 18px;">Execution Time for Last 10 Runs for {job_name_filter}</h1>
+                <div style="display: flex; align-items: center; justify-content: center;">
+                    <div style="flex-grow: 1; text-align: left;">
+                        <h1 style="color: #5D6A85; margin: 0; font-size: 18px;">Job Status by {project_name_filter} Project</h1> 
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            last_10_runs = filtered_df[filtered_df['SCHEDULE_NAME'] == job_name_filter].sort_values(by='END_TIME', ascending=False).head(10)
+            job_count = filtered_df.groupby('STATUS') ['SCHEDULE_NAME'].count()
+            if not job_count.empty:
+                fig = px.bar(job_count, x=job_count.index, y=job_count.values, color = job_count.index, color_discrete_map=colors, 
+                                width=400, height=400)
+                fig.update_yaxes (title="Job Count",dtick=100)
+                st.plotly_chart(fig)
+            else:
+                st.write('No data to Display')
+    with col2:
+        st.markdown(
+            f"""
+            <div style="display: flex; align-items: center; justify-content: center;">
+                <div style="Flex-grow: 1; text-align: left;">
+                    <h1 style="color: #5D6A85; margin: 0; font-size: 18px;">Execution Time for Last 10 Runs</h1> 
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        # Show last 10 runs from the filtered data
+        if not filtered_df.empty:
+            last_10_runs = filtered_df.sort_values(by='END_TIME', ascending=False).head(10) 
             if not last_10_runs.empty:
-                fig = px.bar(last_10_runs, x='END_TIME', y='TOTAL_RUNTIME_MINUTES', width=400, height=400)
+                fig = px.bar(last_10_runs, x='END_TIME', y='TOTAL_RUNTIME_MINUTES', width=400, height=400) 
                 fig.update_yaxes(title="Time(Minutes)", dtick=5)
                 st.plotly_chart(fig)
             else:
-                st.write('No data to display')
+                st.info("No data to display")
         else:
-            st.write('No data to Display')
-    else:
-        st.write("No data to display.")
-
-
-# Main page rendering
-st.markdown("""<style>div[data-testid="stAppViewContainer"] { padding: 0; } .stAppViewContainer > div { margin: 0; } .stAppViewContainer > div > div { margin: 0; }</style>""", unsafe_allow_html=True)
-
-# Logo
-col1, col2, col3 = st.columns([4, 1, 1])
-with col3:
-    st.image("assets/logo_cloudeqs.png", width=200)
-
-# Render the job history fragment
-render_job_history_fragment()
-
-
+            st.info("No data available in selected filters")
+else:                
+    st.write("No data to display.")
 
 
 

@@ -5,10 +5,16 @@ import plotly.express as px
 import json
 import time
 from datetime import datetime, date, timedelta, timezone
-
-st.set_page_config(page_title="Job Logs Dashboard", layout="wide")
+import os
+import snowflake.connector
 
 session = session()
+
+st.set_page_config(
+    page_title="Job Logs Dashboard",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 def load_css(path):
     with open(path) as f:
@@ -16,6 +22,7 @@ def load_css(path):
 
 load_css("CSS/sidebar.css")
 load_css("CSS/op_status.css")
+
 
 from sidebar import render_sidebar
 render_sidebar()
@@ -100,7 +107,7 @@ def get_matillion_failed_dataframe():
     with cte_mat_temp as(
         SELECT upper(sd.name) as SCHEDULE_NAME, upper (rh.job_name) JOB_TAG_NAME, DAYOFWEEK(rh.START_TIME_PST),
             rh.START_TIME_PST AS START_TIME, rh.END_TIME_PST AS END_TIME, TIMESTAMPDIFF('minute',START_TIME, END_TIME) AS TOTAL_RUNTIME_MINUTES,
-            upper(rh.STATE) as STATUS, rh."message" as ERROR_MESSAGE,
+            upper(rh.STATE) as STATUS, rh.MESSAGE as ERROR_MESSAGE,
             rh.TASK_HISTORY_ID, rh. PROJECT_NAME,
             'MATILLION' AS SOURCE_TYPE,
             null as LINKS, null as TRIGGER_BY
@@ -113,7 +120,7 @@ def get_matillion_failed_dataframe():
             and run_date=(select max(run_date) from EDW_LAB_DEV.OBSERVABILITY.matillion_schedules_details)
         WHERE
             enabled=true and
-            rh.type in ('SCHEDULE_ORCHESTRATION', 'QUEUE_ORCHESTRATION') and rh.PROJECT_NAME='ZSCALER_BI_DWH' and
+            rh.JOBTYPE in ('SCHEDULE_ORCHESTRATION', 'QUEUE_ORCHESTRATION') and rh.PROJECT_NAME='ZSCALER_BI_DWH' and
             END_TIME >= DATEADD(hour, -168, CURRENT_TIMESTAMP) ORDER BY END_TIME DESC
     ),
     mat_final_cte as(
@@ -143,8 +150,12 @@ def get_matillion_running_queue():
     CONVERT_TIMEZONE('America/Los_Angeles', 'UTC', MAX(END_TIME_PST))
     FROM EDW_LAB_DEV.OBSERVABILITY.RUN_HISTORY_SUMMARY where END_TIME_PST is not null
     """
-    time_data = mat_session.sql(time_query).to_pandas()
-    timestamp_str = str(time_data.iloc[0, 0])
+    time_data = mat_session.sql(time_query).to_pandas() 
+    timestamp_str = str(time_data.iloc[0,0])
+    
+    # Handle None or invalid timestamp
+    if timestamp_str == 'None' or ' ' not in timestamp_str:
+        return pd.DataFrame()
     date_str, time_str = timestamp_str.split(' ')
     time_str = time_str.split('.')[0]
     time_str = time_str[:5]
@@ -240,7 +251,30 @@ def fetch_all_op_status_data():
     
     return dbt_api_task_ids, dbt_table_task_ids, mat_table_task_df, mat_api_task_ids
 
+# spinner_placeholder=st.empty()
+# with st.spinner ('Loading, please wait...'):
+#     #st.session_state.spinner_text='Loading dataframe and charts...'
+#     #spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading dataframe and charts...</p>", unsafe_allow_html=True) 
+#     cl1, cl2, cl3 = st.columns ([4,1,1])
+#     with cl3:
+#         st.image("assets/logo_cloudeqs.png", width=200)
 
+
+
+# with st.container(border=False):
+#     st.markdown(
+#         """
+#         <div>
+#             <h1 class="hover-effect">
+#                 OP Status Update
+#             </h1>
+#         </div>
+#         """, unsafe_allow_html=True
+#     )
+
+# col1, col2 = st.columns([1, 3])  # adjust the ratio as needed
+# with col1:
+#     source_type = st.selectbox("Select Source", ["MATILLION", "DBT"])
 @st.fragment
 def render_op_status_fragment():
     """Fragment UI with session state for operational status updates."""
@@ -258,16 +292,16 @@ def render_op_status_fragment():
         st.session_state.op_status_filters['source_type'] = st.session_state.source_select
     
     # Header
-    with st.container(border=False):
-        st.markdown(
-            """
-            <div>
-                <h1 style="font-family: Inter, sans-serif; font-size: 22px; text-align: left;">
-                    OP Status Update
-                </h1>
-            </div>
-            """, unsafe_allow_html=True
-        )
+    # with st.container(border=False):
+    #     st.markdown(
+    #         """
+    #         <div>
+    #             <h1 style="font-family: Inter, sans-serif; font-size: 22px; text-align: left;">
+    #                 OP Status Update
+    #             </h1>
+    #         </div>
+    #         """, unsafe_allow_html=True
+    #     )
     
     # Load all data once (cached)
     dbt_api_task_ids, dbt_table_task_ids, mat_table_task_df, mat_api_task_ids = fetch_all_op_status_data()
@@ -281,6 +315,7 @@ def render_op_status_fragment():
         if source_type == "MATILLION":
             matillion_df = pd.concat([mat_table_task_df, mat_api_task_ids], ignore_index=True)
             matillion_df['TASK_HISTORY_ID'] = matillion_df['TASK_HISTORY_ID'].astype(int)
+            # Only drop duplicates by TASK_HISTORY_ID to keep all jobs with same name but different IDs
             matillion_df = matillion_df.drop_duplicates(subset=['TASK_HISTORY_ID'], keep='first')
             matillion_df = matillion_df.sort_values(by='TASK_HISTORY_ID', ascending=False)
             mat_task_id_with_name = [f"{task_id} - {job_tag}" for task_id, job_tag in zip(matillion_df['TASK_HISTORY_ID'], matillion_df['JOB_TAG_NAME'])]
@@ -288,13 +323,14 @@ def render_op_status_fragment():
         else:
             dbt_df = pd.concat([dbt_table_task_ids, dbt_api_task_ids], ignore_index=True)
             dbt_df['TASK_HISTORY_ID'] = dbt_df['TASK_HISTORY_ID'].astype(int)
+            # Only drop duplicates by TASK_HISTORY_ID to keep all jobs with same name but different IDs
             dbt_df = dbt_df.drop_duplicates(subset=['TASK_HISTORY_ID'], keep='first')
             dbt_df = dbt_df.sort_values(by='TASK_HISTORY_ID', ascending=False)
             dbt_task_id_with_name = [f"{task_id} - {schedule_name}" for task_id, schedule_name in zip(dbt_df['TASK_HISTORY_ID'], dbt_df['SCHEDULE_NAME'])]
             task_hist_id = dbt_task_id_with_name
         
         if len(task_hist_id) > 0:
-            task_history_id_with_name = st.selectbox("Select Task History ID", task_hist_id)
+            task_history_id_with_name = st.selectbox("Select Task History ID", task_hist_id, key='task_select_box')
             task_history_id = int(task_history_id_with_name.split(' - ')[0])
             comments = st.text_input("Enter Comments")
             reviewed = st.checkbox("Reviewed")
@@ -302,13 +338,17 @@ def render_op_status_fragment():
             st.warning('No Data Available')
         
         submit_button = st.form_submit_button(label="Save")
-    
+
     # Handle form submission
-    user_dict = st.experimental_user
-    user_mail = user_dict.get("email", "unknown_user@example.com")
+    # Get user email from Snowflake session (current logged-in user)
+    try:
+        user_mail = session.sql("SELECT CURRENT_USER()").to_pandas().iloc[0, 0]
+    except:
+        user_mail = "observabilityservice@example.com"
     
     if submit_button and len(task_hist_id) > 0:
         comments_escaped = comments.replace("'", "''")
+        reviewed_val = "TRUE" if reviewed else "FALSE"
         merge_query = f"""
         insert into EDW_LAB_DEV.OBSERVABILITY.JOBS_COMMENTS  (
         run_id,
@@ -322,7 +362,7 @@ def render_op_status_fragment():
         '{task_history_id}',
         '{source_type}',
         '{comments_escaped}',
-        '{reviewed}',
+        {reviewed_val},
         '{user_mail}',
          current_timestamp
     );
@@ -336,9 +376,9 @@ def render_op_status_fragment():
 st.markdown("""<style>div[data-testid="stAppViewContainer"] { padding: 0; } .stAppViewContainer > div { margin: 0; } .stAppViewContainer > div > div { margin: 0; }</style>""", unsafe_allow_html=True)
 
 # Logo
-cl1, cl2, cl3 = st.columns([4, 1, 1])
-with cl3:
-    st.image("assets/logo_cloudeqs.png", width=200)
+# cl1, cl2, cl3 = st.columns([4, 1, 1])
+# with cl3:
+#     st.image("assets/logo_cloudeqs.png", width=200)
 
 # Render the operational status fragment
 render_op_status_fragment()

@@ -1,92 +1,215 @@
-/* style.css */
-
-/* Page Background */
+/* ======================
+   GLOBAL
+====================== */
 .stApp {
     font-family: 'Inter', sans-serif;
 }
 
-/* Header */
+
+h1.hover-effect {
+            color: Black;
+            font-family: 'Inter', sans-serif;
+            font-size: 22px;
+            padding: 2px 2px;
+            margin-bottom: 10px;
+            text-align: left;
+            transition: transform 0.3s ease;
+            display: inline-block;
+            transform-origin: center;
+        }
+
+h1.hover-effect:hover {
+          transform: scale(1.05);
+        }
+
+
+
+/* ======================
+   HEADER
+====================== */
 .custom-header {
     font-weight: 700;
     font-size: 2.2rem;
     color: #1e3a8a;
     text-align: center;
-    animation: fadeInDown 1s ease;
+    animation: fadeInDown 0.8s ease;
 }
 
-/* Card Container */
+/* ======================
+   CARD CONTAINER
+====================== */
 .stContainer {
     border-radius: 15px;
-    box-shadow: 0px 4px 15px rgba(0,0,0,0.05);
-    padding: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    padding: 16px;
     background: white;
-    transition: all 0.3s ease-in-out;
-}
-.stContainer:hover {
-    transform: scale(1.01);
-    box-shadow: 0px 6px 20px rgba(0,0,0,0.1);
+    transition: all 0.25s ease-in-out;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
 }
 
-/* Status Badges */
+.stContainer:hover {
+    transform: scale(1.01);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+}
+
+/* ======================
+   STATUS BADGES
+====================== */
 .status-badge {
     display: inline-block;
-    padding: 4px 10px;
+    padding: 4px 12px;
     border-radius: 12px;
     font-size: 0.8rem;
     font-weight: 600;
     color: white;
+    white-space: nowrap;
 }
 
-table {
+/* ======================
+   TABLE RESPONSIVE FIX
+====================== */
+.stDataFrameContainer {
     width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent table shrink */
+.stDataFrameContainer table {
+    width: max-content !important;
+    min-width: 720px;
     border-collapse: collapse;
 }
 
+/* Headers & cells */
+.stDataFrameContainer th,
+.stDataFrameContainer td {
+    padding: 8px 12px;
+    text-align: center;
+    border: 1px solid #e2e8f0;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+/* Header style */
 thead {
     background: #30679d;
     font-weight: 600;
 }
 
-td, th {
-    padding: 8px 12px;
-    text-align: center;
-    border: 1px solid #e2e8f0;
-}
+/* ======================
+   STATUS COLORS
+====================== */
+.FAILED   { background: #ef4444; }
+.SUCCESS  { background: #22c55e; }
+.RUNNING  { background: #facc15; color: black; }
+.QUEUED   { background: #3b82f6; }
 
-
-
-.FAILED { background: #ef4444; }
-.SUCCESS { background: #22c55e; }
-.RUNNING { background: #facc15; color: black; }
-.QUEUED { background: #3b82f6; }
-
-/* Animations */
-@keyframes fadeInDown {
-    from { opacity: 0; transform: translateY(-20px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-
+/* ======================
+   SELECT / FILTER
+====================== */
 div[data-baseweb="select"] {
-        max-width: 200px;   /* control width */
+    /* max-width: 220px; */
+    width: 100%;
 }
 
-/* Reduce top padding of Streamlit page */
+/* ======================
+   PAGE SPACING
+====================== */
 .block-container {
+    padding-left: calc(var(--sidebar-width)) !important;
     padding-top: 1.8rem !important;
+
 }
 
-/* Reduce extra space added by spinner */
-div[data-testid="stSpinner"] {
-    margin-top: -5px !important;
+/* ======================
+   ANIMATIONS
+====================== */
+@keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Sidebar background color */
-[data-testid="stSidebar"] {
-    background-color: #3B82F6 !important;
+
+/* =========================
+   SELECTBOX BORDER STYLING
+========================= */
+div[data-baseweb="select"],
+.stDateInput > div,
+.stTextInput > div {
+    border: 1.5px solid #CBD5E1 !important; /* slate-300 */
+    border-radius: 8px !important;
+    background-color: #ffffff !important;
 }
 
-/* Sidebar text color */
-[data-testid="stSidebar"] * {
-    color: white !important;
+/* Remove inner default borders */
+div[data-baseweb="select"] > div,
+.stDateInput > div > div,
+.stTextInput > div > div {
+    border: none !important;
+    box-shadow: none !important;
 }
+
+/* Hover state */
+div[data-baseweb="select"]:hover,
+.stDateInput > div:hover,
+.stTextInput > div:hover {
+    border-color: #2563EB !important; /* blue-600 */
+}
+
+/* Focus state */
+div[data-baseweb="select"]:focus-within,
+.stDateInput > div:focus-within,
+.stTextInput > div:focus-within {
+    border-color: #2563EB !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+/* ======================
+   RESPONSIVE BREAKPOINTS
+====================== */
+
+
+
+/* Medium screens / laptops */
+@media (max-width: 1199px) {
+    .block-container {
+        padding-left: calc(var(--sidebar-width)) !important;
+    }
+    .custom-header {
+        font-size: 1.9rem;
+    }
+
+    .stDataFrameContainer table {
+        min-width: 650px;
+    }
+
+    .stContainer {
+        padding: 15px;
+    }
+}
+
+/* Mobile / small screens */
+@media (max-width: 767px) {
+    .block-container {
+        padding-left: calc(var(--sidebar-width)) !important;
+    }
+    .custom-header {
+        font-size: 1.5rem;
+    }
+
+    .stDataFrameContainer table {
+        min-width: 520px;
+    }
+
+    .stContainer {
+        padding: 12px;
+    }
+
+    div[data-baseweb="select"] {
+        max-width: 160px;
+    }
+}
+

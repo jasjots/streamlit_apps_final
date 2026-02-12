@@ -8,7 +8,24 @@ div[data-testid="stSpinner"] {
     margin-top: -5px !important;
 }
 
-/* Sidebar background color */
+
+h1.hover-effect {
+            color: Black;
+            font-family: 'Inter', sans-serif;
+            font-size: 22px;
+            padding: 2px 2px;
+            margin-bottom: 10px;
+            text-align: left;
+            transition: transform 0.3s ease;
+            display: inline-block;
+            transform-origin: center;
+        }
+
+h1.hover-effect:hover {
+          transform: scale(1.05);
+        }
+
+Sidebar background color
 [data-testid="stSidebar"] {
     background-color: #3B82F6 !important;
 }
@@ -19,9 +36,19 @@ div[data-testid="stSpinner"] {
 }
 
 .st-emotion-cache-1kq4mb7 h1 {
-    font-size: 2.75rem;
+    font-size: 22px;
     font-weight: 700;
-    padding: 0.25rem 0px 1rem;
+    padding: 0rem 0px 2.3rem 0.1rem;
+    margin: 1px auto 3px 1px;
+}
+
+.st-emotion-cache-1kq4mb7 {
+    font-size: 1rem;
+    margin-bottom: -3rem;
+    color: inherit;
+    max-width: 100%;
+    width: 100%;
+    overflow-wrap: break-word;
 }
 
 /* ===== Common Section Container (Add User + Existing Users) ===== */
@@ -45,6 +72,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
 
 /* ===== User Row Card ===== */
 .user-row-card {
+    display: none;
     background-color: #F8FAFC;
     border: 1px solid #E2E8F0;
     border-radius: 12px;
@@ -77,4 +105,112 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
 .user-row-card button:first-of-type {
     background-color: #2563EB !important;
     color: white !important;
+}
+
+/* Reduce vertical spacing between rows */
+div[data-testid="stHorizontalBlock"] {
+    gap: 3px !important;
+}
+
+/* Reduce widget vertical margin */
+.stSelectbox, .stButton {
+    margin-top: 0px !important;
+    margin-bottom: 0px !important;
+}
+
+/* Compact text */
+.user-text {
+    margin: 4px 0 !important;
+    font-size: 14px;
+}
+
+/* ===== Action Buttons Layout ===== */
+.user-row-card .stButton button {
+    width: 90px !important;      /* reduce width */
+    height: 34px !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    border-radius: 8px !important;
+    padding: 0 !important;
+}
+
+
+/* Center buttons inside Action column */
+.user-row-card [data-testid="stHorizontalBlock"] {
+    justify-content: center !important;
+}
+
+
+.block-container {
+    padding-left: calc(var(--sidebar-width) - (40px)) !important;
+}
+
+/* Medium screens / laptops */
+@media (max-width: 1199px) {
+    .block-container {
+        padding-left: calc(var(--sidebar-width) - (40px)) !important;
+    }
+}
+
+/* Mobile / small screens */
+@media (max-width: 767px) {
+    .block-container {
+        padding-left: calc(var(--sidebar-width)) !important;
+    }
+}
+/* Make tables scrollable on small screens */
+.stDataFrameContainer {
+    width: 100% !important;
+    overflow-x: auto !important; /* allow horizontal scroll */
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Force table inside wrapper to not shrink */
+.stDataFrameContainer table {
+    width: max-content !important; /* table expands as needed */
+    min-width: 600px; /* adjust based on your columns */
+    border-collapse: collapse;
+}
+
+/* Prevent headers and cells from collapsing */
+.stDataFrameContainer th,
+.stDataFrameContainer td {
+    white-space: nowrap !important;
+    text-align: left !important;
+    padding: 6px 8px !important;
+}
+
+/* Optional: make table visually nicer on mobile */
+@media (max-width: 767px) {
+    .stDataFrameContainer {
+        margin-bottom: 1rem !important;
+    }
+}
+
+/* =========================
+   SELECTBOX BORDER STYLING
+========================= */
+
+/* Outer selectbox container */
+div[data-baseweb="select"] {
+    border: 1.5px solid #CBD5E1 !important; /* slate-300 */
+    border-radius: 8px !important;
+    background-color: #ffffff !important;
+}
+
+/* Inner control */
+div[data-baseweb="select"] > div {
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Hover effect */
+div[data-baseweb="select"]:hover {
+    border-color: #2563EB !important; /* blue-600 */
+}
+
+/* Focused state */
+div[data-baseweb="select"]:focus-within {
+    border-color: #2563EB !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
 }

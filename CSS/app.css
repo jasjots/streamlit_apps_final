@@ -1,16 +1,33 @@
 .status-card {
-            text-align: left;
-            background-color: #fff;
-            border-radius: 10px;
-            margin: 10px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            width: 200px;   /* fixed width */
-            height: 120px;  /* fixed height */
-            display: flex;
-            flex-direction: column;
-            transition: all 0.3s ease-in-out;
-            justify-content: center;
-        }
+    text-align: left;
+    background-color: #fff;
+    border-radius: 10px;
+    margin:0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    flex: 1 1 200px;
+    width: 100%;        /* full width by default */
+    max-width: 200px;   /* limit max width */
+    min-width: 160px;
+    min-height: 120px;  /* keep some height */
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s ease-in-out;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+.status-card-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start; /* force left alignment */
+    gap: 15px;                   /* 🔥 controls spacing cleanly */
+    margin-left: 0;
+    margin-top: 10px;
+    padding-left: 0;
+}
+
+
+
 
 .status-card p {
             font-size: 15px;
@@ -21,7 +38,6 @@
         }
 
 .status-card h2 {
-        
             font-size: 32px;
             font-family: 'Inter', sans-serif;
             color: #000;
@@ -46,20 +62,22 @@
 }
 
 .dashboard-box {
-            background-color: #fff;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px auto;
-            box-shadow: 0 6px 16px rgba(0,0,0,0.15);
-            max-width: 1200px;
-            animation: fadeIn 1s ease-in-out;
-        }
-
+    background-color: #fff;
+    border-radius: 10px;
+    padding: 20px;
+    margin: 10px auto;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+    width: 100%;
+    max-width: 1200px;
+    animation: fadeIn 1s ease-in-out;
+    box-sizing: border-box;
+}
 h1.hover-effect {
             color: Black;
             font-family: 'Inter', sans-serif;
             font-size: 22px;
-            margin-bottom: 20px;
+            padding: 2px 2px;
+            margin-bottom: 8px;
             text-align: left;
             transition: transform 0.3s ease;
             display: inline-block;
@@ -70,28 +88,109 @@ h1.hover-effect:hover {
           transform: scale(1.05);
         }
 
+
+
 @keyframes fadeIn {
         from { opacity: 0; transform: translateY(20px); }
         to { opacity: 1; transform: translateY(0); }
          
         }
-
-/* Sidebar background color */
-[data-testid="stSidebar"] {
-    background-color: #3B82F6 !important;
-}
-
-/* Sidebar text color */
-[data-testid="stSidebar"] * {
-    color: white !important;
-}
-
 /* Reduce top padding of Streamlit page */
 .block-container {
     padding-top: 1.8rem !important;
+    padding-left: calc(var(--sidebar-width)) !important;
 }
 
-/* Reduce extra space added by spinner */
-div[data-testid="stSpinner"] {
-    margin-top: -5px !important;
+
+.st-emotion-cache-1kq4mb7 {
+    font-family: "Source Sans", sans-serif, "Source Sans", sans-serif;
+    font-size: 1rem;
+    margin-bottom: -20px;
+    color: inherit;
+    max-width: 100%;
+    width: 100%;
+    overflow-wrap: break-word;
 }
+
+/* =========================
+   RESPONSIVE MEDIA QUERIES
+========================= */
+@media (max-width: 1199px) {
+    .status-card {
+        max-width: 100px;
+        margin: 8px;
+    }
+
+    .dashboard-box {
+        padding: 16px;
+    }
+
+    h1.hover-effect {
+        font-size: 20px;
+    }
+    .block-container {
+        padding-left: calc(var(--sidebar-width)) !important;
+    }
+}
+
+@media (max-width: 767px) {
+     .block-container {
+        padding-left: calc(var(--sidebar-width)) !important;
+    }
+
+     .status-card-container {
+        gap: 12px;
+    }
+    .status-card {
+        flex: 1 1 100%;
+        max-width: 100%;
+        min-width: 150px;
+    }
+
+    .dashboard-box {
+        padding: 12px;
+        margin: 10px auto;
+    }
+
+    h1.hover-effect {
+        font-size: 18px;
+        padding: 2px 2px;
+        margin-bottom: 5px;
+    }
+
+    .block-container {
+        padding-left: calc(var(--sidebar-width) + 0.5rem) !important;
+    }
+}
+
+
+/* =========================
+   SELECTBOX BORDER STYLING
+========================= */
+
+/* Outer selectbox container */
+div[data-baseweb="select"] {
+    border: 1.5px solid #CBD5E1 !important; /* slate-300 */
+    border-radius: 8px !important;
+    background-color: #ffffff !important;
+}
+
+/* Inner control */
+div[data-baseweb="select"] > div {
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Hover effect */
+div[data-baseweb="select"]:hover {
+    border-color: #2563EB !important; /* blue-600 */
+}
+
+/* Focused state */
+div[data-baseweb="select"]:focus-within {
+    border-color: #2563EB !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+
+

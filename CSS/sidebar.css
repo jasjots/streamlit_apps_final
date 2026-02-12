@@ -1,26 +1,36 @@
-/* ===============================
+/* =========================================================
+   ROOT VARIABLES (DESKTOP DEFAULT)
+========================================================= */
+:root {
+    --sidebar-width: 110px;
+    --btn-size: 56px;
+    --icon-size: 22px;
+    --label-size: 11px;
+}
+
+/* =========================================================
    STATIC SIDEBAR CONTAINER
-================================ */
+========================================================= */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0F172A, #1E293B);
-    width: 100px !important;
-    min-width: 100px !important;
-    max-width: 100px !important;
+    background: #0F172A !important;
+    width: var(--sidebar-width) !important;
+    min-width: var(--sidebar-width) !important;
+    max-width: var(--sidebar-width) !important;
     overflow: hidden !important;
     transform: none !important;
 }
 
 /* Prevent collapsed state completely */
 [data-testid="stSidebar"][aria-expanded="false"] {
-    width: 100px !important;
-    min-width: 100px !important;
-    max-width: 100px !important;
+    width: var(--sidebar-width) !important;
+    min-width: var(--sidebar-width) !important;
+    max-width: var(--sidebar-width) !important;
     transform: none !important;
 }
 
-/* ===============================
+/* =========================================================
    REMOVE STREAMLIT DEFAULT UI
-================================ */
+========================================================= */
 [data-testid="stSidebarNav"],
 section[data-testid="stSidebar"] ul,
 section[data-testid="stSidebar"] li {
@@ -34,7 +44,7 @@ button[aria-label="Expand sidebar"] {
     display: none !important;
 }
 
-/* Hide sidebar header completely */
+/* Hide sidebar header */
 [data-testid="stSidebarHeader"] {
     display: none !important;
     height: 0 !important;
@@ -42,78 +52,150 @@ button[aria-label="Expand sidebar"] {
     margin: 0 !important;
 }
 
-/* ===============================
+/* =========================================================
    SIDEBAR BUTTON STYLE
-================================ */
+========================================================= */
 [data-testid="stSidebar"] button {
-    width: 56px !important;
-    height: 56px !important;
-    margin: -40px auto -5px 1px !important;
+    width: var(--btn-size) !important;
+    height: var(--btn-size) !important;
+    margin: -28px auto -18px 1px !important;
     border-radius: 14px !important;
-    background: #FFFFFF !important;
+    background: #0F172A !important;
     border: none !important;
     box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
+    transition: opacity 0.25s ease, box-shadow 0.25s ease;
 }
 
-/* ===============================
+/* =========================================================
    ICON INSIDE BUTTON
-================================ */
+========================================================= */
 .icon-wrapper {
     position: relative;
-    top: -48px;           /* Pull icon into button */
+    top: -48px;
     display: flex;
     justify-content: center;
     pointer-events: none;
 }
 
-/* SVG / PNG icon */
 .sidebar-icon-img {
-    width: 22px;
-    height: 22px;
-    color: #0F172A;       /* Dark icon */
+    width: var(--icon-size);
+    height: var(--icon-size);
 }
 
-/* ===============================
+/* =========================================================
    LABEL BELOW BUTTON
-================================ */
+========================================================= */
 .sidebar-label {
-    font-size: 11px;
+    font-size: var(--label-size);
     color: #CBD5E1;
     text-align: center;
-    margin: -29px auto 50px -3px;
+    margin: -42px auto 26px -3px;
     font-family: Inter, sans-serif;
 }
 
-/* ===============================
+.sidebar-label:hover {
+    transform: scale(1.2); /* Slight zoom effect */
+    text-shadow: 0 0 10px #ffffff, 0 0 20px #ffffff;
+    cursor: pointer; /* Pointer on hover */
+}
+
+
+.sidebar-logo {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 18px;
+    margin-bottom: 10px;
+}
+
+.sidebar-logo img {
+    width: 72px;
+    height: auto;
+    margin-top: -3rem;
+    filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.6));
+    transition: transform 0.3s ease;
+}
+
+.sidebar-logo img:hover {
+    transform: scale(1.08);
+}
+
+
+/* Wrapper around each sidebar item */
+.nav-item {
+    position: relative;
+}
+
+/* Move Streamlit button into position */
+.nav-item button {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 56px !important;
+    height: 56px !important;
+    z-index: 2;
+    opacity: 0; /* hide default button look but keep it clickable */
+}
+
+/* Arrow indicator */
+/* Professional active page indicator (vertical line) */
+.active-indicator {
+    position: absolute;
+    right: -1px;           /* slightly outside sidebar edge */
+    top: -46px;            /* aligns with icon */
+    width: 3px;
+    height: 38px;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: 0 0 8px #fff;
+    animation: pulseLine 2s infinite ease-in-out;
+}
+
+@keyframes pulseLine {
+    0%   { opacity: 0.6; box-shadow: 0 0 4px #fff; }
+    50%  { opacity: 1;   box-shadow: 0 0 12px #fff; }
+    100% { opacity: 0.6; box-shadow: 0 0 4px #fff; }
+}
+
+
+/* Make active label blue */
+.nav-item .sidebar-label {
+    position: relative;
+    top: -8px;
+}
+
+/* =========================================================
    MAIN CONTENT SPACING FIX
-================================ */
+========================================================= */
 .st-emotion-cache-1echtaq {
-    padding-top: 4.5rem;
+    padding-top: 2.5rem;
     padding-bottom: 6rem;
 }
 
 
-/* ===============================
-   FADE OTHERS ON HOVER
-================================ */
-
-/* Smooth transition */
-[data-testid="stSidebar"] button {
-    transition: opacity 0.25s ease, box-shadow 0.25s ease;
+/* =========================================================
+   RESPONSIVE — LAPTOP / MEDIUM SCREENS
+========================================================= */
+@media (max-width: 1199px) {
+    :root {
+        --sidebar-width: 88px;
+        --btn-size: 52px;
+        --icon-size: 20px;
+        --label-size: 10px;
+    }
 }
 
-/* When hovering inside sidebar, fade all buttons */
-[data-testid="stSidebar"]:hover button {
-    opacity: 0.35;
-}
+/* =========================================================
+   RESPONSIVE — MOBILE / SMALL SCREENS
+========================================================= */
+@media (max-width: 767px) {
+    :root {
+        --sidebar-width: 72px;
+        --btn-size: 46px;
+        --icon-size: 18px;
+    }
 
-/* Keep hovered button fully visible */
-[data-testid="stSidebar"] button:hover {
-    opacity: 1;
-    box-shadow: 0 0 0 2px #3B82F6; /* subtle focus ring */
-}
-
-/* Keep icon sharp */
-[data-testid="stSidebar"] button:hover + .icon-wrapper .sidebar-icon-img {
-    filter: brightness(0.85);
+    .sidebar-label {
+        display: none;
+    }
 }

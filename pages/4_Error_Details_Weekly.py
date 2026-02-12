@@ -27,9 +27,6 @@ load_css("CSS/error.css")
 
 from sidebar import render_sidebar
 render_sidebar()
-
-#local_css('observability_app/src/css/error.css')
-
 							   
 																	  
 													   
@@ -66,7 +63,7 @@ def mat_failed_df():
     ),
     cte_mat_temp as (
         SELECT upper(sd.name) as SCHEDULE_NAME, upper(rh.job_name) JOB_TAG_NAME, DAYOFWEEK(rh.START_TIME_PST),
-            rh.START_TIME_PST AS START_TIME, rh. END_TIME_PST AS END_TIME, TIMESTAMPDIFF('minute',START_TIME, END_TIME) AS TOTAL_RUNTIME_MINUTES, upper(rh.STATE) as STATUS, rh."message" as ERROR_MESSAGE,
+            rh.START_TIME_PST AS START_TIME, rh. END_TIME_PST AS END_TIME, TIMESTAMPDIFF('minute',START_TIME, END_TIME) AS TOTAL_RUNTIME_MINUTES, upper(rh.STATE) as STATUS, rh.MESSAGE as ERROR_MESSAGE,
             rh.TASK_HISTORY_ID, rh. PROJECT_NAME,
             'MATILLION' AS SOURCE_TYPE,
             null as LINKS, null as TRIGGER_BY
@@ -79,7 +76,7 @@ def mat_failed_df():
             and run_date=(select max(run_date) from EDW_LAB_DEV.OBSERVABILITY.matillion_schedules_details) 
         WHERE   
                 enabled=true and
-                rh.type in ('SCHEDULE_ORCHESTRATION', 'QUEUE_ORCHESTRATION') and rh. PROJECT_NAME='ZSCALER_BI_DWH' and
+                rh.JOBTYPE in ('SCHEDULE_ORCHESTRATION', 'QUEUE_ORCHESTRATION') and rh. PROJECT_NAME='ZSCALER_BI_DWH' and
                 END_TIME >= DATEADD (hour, -168, CURRENT_TIMESTAMP) ORDER BY END_TIME DESC
     ),
     mat_final_cte as(
@@ -225,6 +222,8 @@ def mat_running_run_and_queue():
     """
     time_data = mat_session.sql(time_query).to_pandas()
     timestamp_str = str(time_data.iloc[0,0])
+    if timestamp_str == 'None' or ' ' not in timestamp_str:
+        return pd.DataFrame()
     date_str, time_str = timestamp_str.split(' ')
     # Further split the time to remove milliseconds 
     time_str = time_str.split('.')[0]
@@ -380,7 +379,7 @@ def render_error_details_fragment():
         st.markdown(
             """
             <div>
-                <h1 style="font-family: Inter, sans-serif; font-size: 22px; text-align: left;">
+                <h1 class="hover-effect">
                     Error Details Weekly
                 </h1>
             </div>
@@ -559,17 +558,196 @@ def render_error_details_fragment():
 
 #session = session
 										  
-spinner_placeholder=st.empty()
-with st.spinner ('Loading, please wait...'):
-    #st.session_state.spinner_text='Loading dataframe and charts...'
-    #spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading dataframe and charts...</p>", unsafe_allow_html=True) 
-    cl1, cl2, cl3 = st.columns ([4,1,1])
-    with cl3:
-        st.image("assets/logo_cloudeqs.png", width=200)
+# spinner_placeholder=st.empty()
+# with st.spinner ('Loading, please wait...'):
+#     #st.session_state.spinner_text='Loading dataframe and charts...'
+#     #spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading dataframe and charts...</p>", unsafe_allow_html=True) 
+#     cl1, cl2, cl3 = st.columns ([4,1,1])
+#     with cl3:
+#         st.image("assets/logo_cloudeqs.png", width=200)
 
 
-# Call the fragment
-render_error_details_fragment()
+
+with st.container(border=False):
+    st.markdown(
+        """
+        <div>
+            <h1 class="hover-effect">
+                Error Details Weekly
+            </h1>
+        </div>
+        """, unsafe_allow_html=True
+    )
+    st.markdown("")
+
+
+
+local_time = time.localtime()
+gmt_end_time = datetime.now(timezone.utc)
+gmt_start_time = datetime.now(timezone.utc) - timedelta (hours=24)
+
+dbt_api_failed_df = dbt_failed_jobs(20, gmt_start_time,gmt_end_time) 
+# st.dataframe (dbt_api_failed_df)
+
+dbt_df=failed_dbt_data()
+
+df=pd.concat([dbt_df, dbt_api_failed_df], ignore_index=True) 
+df=df.drop_duplicates (subset=['TASK_HISTORY_ID'])
+# st.dataframe (df)
+
+mat_df=mat_failed_df()
+#st.dataframe (mat_df)
+df=pd.concat([df, mat_df], ignore_index=True)
+
+mat_api_fail=mat_running_run_and_queue()
+if not mat_api_fail.empty and 'START_TIME' in mat_api_fail.columns:
+    mat_api_fail['START_TIME'] = pd.to_datetime(mat_api_fail['START_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S') 
+    mat_api_fail['END_TIME'] = pd.to_datetime(mat_api_fail['END_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S')
+df['START_TIME'] = pd.to_datetime(df['START_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S') 
+df['END_TIME'] = pd.to_datetime(df['END_TIME']).dt.strftime('%Y-%m-%d %H:%M:%S')
+
+df=pd.concat([df, mat_api_fail], ignore_index=True)
+# st.dataframe (mat_api_fail)
+
+source_type_options = ['ALL', 'DBT', 'MATILLION'] #+ list(df['SOURCE_TYPE'].unique())
+status_options = ['FAILED']
+#comment_options = ['ALL']+ list(df['COMMENTS'].unique())
+
+df['STATUS']='FAILED'
+
+# st.dataframe(df)
+with st.container(border=False):
+    col1, col2, col3, col4 = st.columns([1, 1, 1, 1], gap="small")
+
+    with col1:
+        from_date_time_filter = st.date_input(
+            "Select From Date", (pd.to_datetime(df["START_TIME"].max())).date()
+        )
+
+    with col2:
+        to_date_time_filter = st.date_input(
+            "Select To Date", (pd.to_datetime(df["END_TIME"].max())).date()
+        )
+
+    with col3:
+        source_type_filter = st.selectbox("Source Type", options=source_type_options, index=0)
+
+    with col4:
+        status_filter = st.selectbox("Status", options=status_options, index=0)
+
+
+
+    if source_type_filter=='ALL':
+        df_filtered = df[(pd.to_datetime(df["START_TIME"]).dt.date >= from_date_time_filter) & (pd.to_datetime(df["END_TIME"]).dt.date <= to_date_time_filter)]
+    else:
+        df_filtered = df[
+            (pd.to_datetime(df["START_TIME"]).dt.date >= from_date_time_filter) & (pd.to_datetime(df["END_TIME"]).dt.date <= to_date_time_filter) & (df['SOURCE_TYPE'] == source_type_filter)]
+
+
+    df_filtered['LINKS'] = df_filtered.apply(
+        lambda row: f"https://13.90.90.241:8443/#CLOUDX/{row['PROJECT_NAME']}/default/{row['SCHEDULE_NAME']}/run/{row['TASK_HISTORY_ID']}" 
+        if row['SOURCE_TYPE'] == "MATILLION" 
+        else row['LINKS'],
+        axis=1
+    )
+
+    df_filtered = df_filtered.sort_values(by='START_TIME', ascending=False)
+
+    df_filtered['START_TIME'] = pd.to_datetime(df_filtered['START_TIME'])
+    df_filtered["START_TIME"] = df_filtered["START_TIME"].dt.strftime(
+            "%B %d, %Y at %I:%M %p"
+        )
+    df_filtered['END_TIME'] = pd.to_datetime(df_filtered['END_TIME'])
+    df_filtered["END_TIME"] = df_filtered["END_TIME"].dt.strftime(
+            "%B %d, %Y at %I:%M %p"
+        )
+    
+    column_config1 = {
+            "PROJECT_NAME": st.column_config.Column(
+                " PROJECT", help="PROJECT NAME", width="medium"
+            ),
+            "SCHEDULE_NAME": st.column_config.Column(
+                " SCHEDULE", help="SCHEDULE NAME", width="medium"
+            ),
+            "JOB_TAG_NAME": st.column_config.Column(
+                " JOB/TAG ", help="JOB/TAG NAME", width="medium"
+            ),
+            "START_TIME": st.column_config.Column(
+                " START TIME (PST)", help="START TIME (PST)", width="medium"
+            ),
+            "END_TIME": st.column_config.Column(
+                " END TIME (PST)", help="END TIME (PST)", width="medium"
+            ),
+            "ERROR_MESSAGE": st.column_config.Column(
+                " ERROR MESSAGE", help="ERROR MESSAGE", width="medium"
+            ),
+            "TOTAL_RUNTIME_MINUTES": st.column_config.Column(
+                " TOTAL RUNTIME (MIN)", help="TOTAL RUNTIME (MINS)", width="medium"
+            ),
+            "TASK_HISTORY_ID": st.column_config.Column(
+                " TASK HISTORY ID", help="TASK HISTORY ID", width="medium"
+            ),
+            "TRIGGER_BY": st.column_config.Column(
+                " TRIGGERED BY", help="TRIGGER BY", width="medium"
+            ),
+            "SOURCE_TYPE": st.column_config.Column(
+                " SOURCE TYPE", help="SOURCE TYPE", width="medium"
+            ),
+            "LINKS": st.column_config.LinkColumn(
+                " LINKS",
+                help="LINKS",
+                width="medium",
+            ),
+            "REVIEWER_NAME": st.column_config.Column(
+                " REVIEWER ",
+                help="REVIEWER NAME",
+                width="medium",
+            ),
+        }
+    
+    def color_status(val):
+            color_map = {
+                "SUCCESS": "#5b85fb",
+                "FAILED": "#f26271",
+                "CANCELLED": "#feb746",
+                "RUNNING": "#61d7a1",
+                "QUEUED": "#fee8c6",
+            }
+            return f'background-color: {color_map.get(val, "white")};font-family: Inter, sans-serif;'
+    
+    df_styled = df_filtered.style.applymap(
+            color_status, subset=["STATUS"]
+        ).set_table_styles(
+            [
+                {
+                    "selector": "th",
+                    "props": [
+                        ("background-color", "#7fcbf0"),  # Dark blue-gray header
+                        ("color", "#000"),
+                        ("font-size", "12px"),
+                        ("font-family", "Inter, sans-serif"),
+                        # ("font-weight", "bold"),
+                        ("text-align", "center"),
+                    ],
+                },
+                {
+                    "selector": "td",
+                    "props": [
+                        ("background-color", "#7fcbf0"),
+                        ("font-family", "Inter, sans-serif"),
+                        ("font-size", "13px"),
+                        ("color", "#000"),
+                    ],
+                },
+            ]
+        )
+
+    st.dataframe(
+            df_styled,
+            column_config=column_config1,
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 # with st.container(border=False):
