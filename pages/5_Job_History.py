@@ -294,8 +294,11 @@ def failed_dbt_data():
     comments_df = comments_data.to_pandas()
     # Merge merged_df with comments data on TASK_HISTORY_ID
     failed_df['TASK_HISTORY_ID'] = failed_df['TASK_HISTORY_ID'].astype(int)
-    comments_df['TASK_HISTORY_ID'] = comments_df['TASK_HISTORY_ID'].astype(int)
-    
+    comments_df['TASK_HISTORY_ID'] = (
+        comments_df['TASK_HISTORY_ID']
+        .replace('None', None)
+        .astype('Int64')
+    )    
     failed_df = pd.merge(failed_df, comments_df, on='TASK_HISTORY_ID', how='left')
 
     columns_to_display = ['SCHEDULE_NAME', 'JOB_TAG_NAME','START_TIME', 'END_TIME', 'TOTAL_RUNTIME_MINUTES', 'TASK_HISTORY_ID', 'STATUS', 'ERROR_MESSAGE', 

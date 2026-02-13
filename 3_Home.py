@@ -261,20 +261,21 @@ def dbt_failed_jobs (param, time_input_start, time_input_end):
     
 
 def mat_running_run_and_queue():
-
+ 
     mat_session = session
     time_query=f"""
     SELECT
     CONVERT_TIMEZONE ('America/Los_Angeles', 'UTC', MAX (END_TIME_PST))
     FROM EDW_LAB_DEV.OBSERVABILITY.RUN_HISTORY_SUMMARY where END_TIME_PST is not null
     """
-    time_data = mat_session.sql(time_query).to_pandas() 
+    time_data = mat_session.sql(time_query).to_pandas()
     timestamp_str = str(time_data.iloc[0,0])
     date_str, time_str = timestamp_str.split(' ')
     # Further split the time to remove milliseconds
     time_str = time_str.split('.')[0]
     # Extract hours and minutes
     time_str= time_str[:5]
+    print(date_str,time_str)
     #st.write(date_str,'-', time_str)
     mat_api=f"""
         select EDW_LAB_DEV.OBSERVABILITY.MATILLION_JOBS_API('{date_str}', '{time_str}');
@@ -286,11 +287,11 @@ def mat_running_run_and_queue():
     body_data=data
     rows = []
     for df in body_data:
-        row= (df.get("id"), 
+        row= (df.get("id"),
         df.get("projectName"),
-        df.get("state"), 
-        df.get("jobName"), 
-        df.get("startTime"), 
+        df.get("state"),
+        df.get("jobName"),
+        df.get("startTime"),
         df.get("endTime")
         )
         rows.append(row)
@@ -298,23 +299,25 @@ def mat_running_run_and_queue():
              'STATUS','SCHEDULE_NAME',
              'START_TIME', 'END_TIME']
     mat_data=pd.DataFrame(rows, columns=columns)
+    # st.write("test")
+    # st.write(mat_data["STATUS"].value_counts())
     mat_data['TASK_HISTORY_ID'] = mat_data['TASK_HISTORY_ID'].astype(int)
-    mat_data['SCHEDULE_NAME'] = mat_data['SCHEDULE_NAME'].str.upper() 
+    mat_data['SCHEDULE_NAME'] = mat_data['SCHEDULE_NAME'].str.upper()
     mat_data['JOB_TAG_NAME']=mat_data['SCHEDULE_NAME']
-
-
-    mat_data['START_TIME'] = mat_data['START_TIME'].apply(convert_to_pst) 
-    mat_data['END_TIME'] = mat_data['END_TIME'].apply(convert_to_pst) 
-    mat_data.loc[mat_data['STATUS'].isin(['QUEUED']), 'START_TIME'] = None 
+ 
+ 
+    mat_data['START_TIME'] = mat_data['START_TIME'].apply(convert_to_pst)
+    mat_data['END_TIME'] = mat_data['END_TIME'].apply(convert_to_pst)
+    mat_data.loc[mat_data['STATUS'].isin(['QUEUED']), 'START_TIME'] = None
     mat_data.loc[mat_data['STATUS'].isin(['RUNNING', 'QUEUED']), 'END_TIME'] = None
-
+ 
     mat_data['TOTAL_RUNTIME_MINUTES'] = (
         pd.to_datetime(mat_data['END_TIME']) - pd.to_datetime(mat_data['START_TIME'])
     ).dt.total_seconds() // 60
     # Create LINKS column
-
+ 
     mat_data['SOURCE_TYPE']='MATILLION'
-
+ 
     # query_schedule = '''
     # SELECT
     #pd.to_datetime (mat_data['START_TIME'])
@@ -338,9 +341,13 @@ def mat_running_run_and_queue():
             FROM EDW_LAB_DEV.OBSERVABILITY.JOBS_COMMENTS cc
             GROUP BY ALL
             '''
-    comments_data = mat_session.sql(query_comments) 
+    comments_data = mat_session.sql(query_comments)
     comments_df = comments_data.to_pandas()
-    comments_df['TASK_HISTORY_ID'] = comments_df['TASK_HISTORY_ID'].astype(int)
+    comments_df['TASK_HISTORY_ID'] = (
+    comments_df['TASK_HISTORY_ID']
+    .replace('None', None)
+    .astype('Int64')
+    )
         # Merge merged_df with comments data on TASK_HISTORY_ID
     mat_data = pd.merge (mat_data, comments_df, on='TASK_HISTORY_ID', how='left')
     # mat_data = pd.concat (mat_data, comments_df, on='TASK_HISTORY_ID', how='left')
@@ -363,7 +370,7 @@ def fetch_schedule_status_data():
         ,',') message, job_run_id, listagg (distinct di.SELECTED,',') AS JOB_TAG_NAME
         from EDW_LAB_DEV.OBSERVABILITY.DBT_INVOCATIONS di inner join
         EDW_LAB_DEV.OBSERVABILITY.DBT_RUN_RESULTS rr on di.invocation_id = rr.invocation_id
-        where UPPER (status) != 'ERROR' and di.env='prod' and di.cause_category in ('scheduled', 'other') and rr.resource_type in ('model', 'test', 'snapshot', 'seed') and 
+        where di.env='prod' and di.cause_category in ('scheduled', 'other') and rr.resource_type in ('model', 'test', 'snapshot', 'seed') and 
                 CONVERT_TIMEZONE ('UTC', 'America/Los_Angeles', di. RUN_COMPLETED_AT) >= DATEADD (hour, -24, CURRENT_TIMESTAMP) 
                 group by job_run_id
     ),
@@ -386,7 +393,7 @@ def fetch_schedule_status_data():
             rh.JOB_NAME = sd.JOB_NAME
             and run_date= (select max (run_date) from EDW_LAB_DEV.OBSERVABILITY.MATILLION_SCHEDULES_DETAILS) 
             WHERE enabled=true and
-                rh.JOBTYPE in ('SCHEDULE ORCHESTRATION', 'QUEUE_ORCHESTRATION') --and rh.PROJECT_NAME = 'ZSCALER_BI_DWH' 
+                rh.JOBTYPE in ('SCHEDULE ORCHESTRATION', 'RUN_ORCHESTRATION')  
                 and END_TIME >= DATEADD (hour, -24, CURRENT_TIMESTAMP) ORDER BY END_TIME DESC
     ),
     mat_final_cte as (
@@ -572,7 +579,7 @@ def render_jobs_status_fragment(df, run_df, queue_df, fail_df):
         final_fail_df = fail_df[fail_col_to_insert]
         concatenated_df_temp = pd.concat([filtered_merged_df, filtered_queue_df], ignore_index=True)
         concatenated_df = pd.concat([final_fail_df, concatenated_df_temp], ignore_index=True)
-
+        
         df_combined = pd.concat([df, concatenated_df], ignore_index=True)
         df_combined.loc[df_combined["STATUS"].str.contains("FAILEDIERROR", case=False), "STATUS"] = "FAILED"
         df_combined["LINKS"] = df_combined.apply(lambda row: f"https://matillion-prod.corp.zscaler.com/#ZSCALER_BI/ZSCALER_BI_DWH/default/{row['SCHEDULE_NAME']}/run/{row['TASK_HISTORY_ID']}" if row["SOURCE_TYPE"] == "MATILLION" else row["LINKS"], axis=1)
@@ -1335,6 +1342,49 @@ def upcoming_sch_idle_time():
     )
 
 
+# @st.fragment
+# def debug_matillion_history():
+#     """Debug fragment: Show last 30 entries from RUN_HISTORY_SUMMARY"""
+#     with st.container(border=True):
+#         st.markdown(
+#             """
+#             <h2 style="color: #f26271;">
+#                 🔍 DEBUG: Matillion Run History (Last 30 Entries)
+#             </h2>
+#             """,
+#             unsafe_allow_html=True,
+#         )
+        
+#         try:
+#             debug_query = """
+#             SELECT 
+#                 TASK_HISTORY_ID,
+#                 PROJECT_NAME,
+#                 JOB_NAME,
+#                 STATE,
+#                 MESSAGE,
+#                 START_TIME_PST,
+#                 END_TIME_PST,
+#                 ENQUEUED_TIME_PST,
+#                 JOBTYPE
+                
+#             FROM EDW_LAB_DEV.OBSERVABILITY.RUN_HISTORY_SUMMARY
+#             ORDER BY START_TIME_PST DESC
+#             LIMIT 30
+#             """
+            
+#             debug_df = session.sql(debug_query).to_pandas()
+
+#             if debug_df.empty:
+#                 st.warning("No data in RUN_HISTORY_SUMMARY")
+#             else:
+#                 st.write(f"**Total records: {len(debug_df)}**")
+#                 st.dataframe(debug_df, use_container_width=True, hide_index=True)
+                
+#         except Exception as e:
+#             st.error(f"Error fetching debug data: {str(e)}")
+
+
 #main
 #main
 # spinner_placeholder=st.empty()
@@ -1352,5 +1402,6 @@ schedule_lag_df ()
 # spinner_placeholder.markdown ("<p style='color: #5D6A85;'>Loading matillion idle time data...</p>", unsafe_allow_html=True) 
 avg_schedule_lag()
 upcoming_sch_idle_time()
+# debug_matillion_history()
 # debug_schedule_tables()
 # spinner_placeholder.markdown ("")

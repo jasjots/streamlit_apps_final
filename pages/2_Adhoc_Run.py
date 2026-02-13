@@ -476,6 +476,7 @@ with tab_dbt :
                 unsafe_allow_html=True,
             )
         st.markdown("---")
+
     #     st.markdown(
     #     """
     #     <div style="text-align: center; font-size: 0.9em; color: #888;">
@@ -485,15 +486,15 @@ with tab_dbt :
     #     """,
     #     unsafe_allow_html=True,
     # )
-    st.markdown(
-            """
-            <div style="text-align: center; padding: 15px; background-color: #f4f4fa; border-radius: 10px; margin-bottom: 20px;">
-                <h1 style="color: #333;">Ad-Hoc DBT Job Runner</h1>
-                <p style="color: #666; font-size: 1.2em;">Dynamically update DBT job steps and execute them effortlessly</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-    )
+    # st.markdown(
+    #         """
+    #         <div style="text-align: center; padding: 15px; background-color: #f4f4fa; border-radius: 10px; margin-bottom: 20px;">
+    #             <h1 style="color: #333;">Ad-Hoc DBT Job Runner</h1>
+    #             <p style="color: #666; font-size: 1.2em;">Dynamically update DBT job steps and execute them effortlessly</p>
+    #         </div>
+    #         """,
+    #         unsafe_allow_html=True,
+    # )
 
     adhoc_cs_page()
 

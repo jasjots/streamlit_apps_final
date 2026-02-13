@@ -5,8 +5,7 @@ import plotly.express as px
 import json
 import time
 from datetime import datetime, date, timedelta, timezone
-import os
-import snowflake.connector
+
 
 session = session()
 
@@ -261,20 +260,20 @@ def fetch_all_op_status_data():
 
 
 
-# with st.container(border=False):
-#     st.markdown(
-#         """
-#         <div>
-#             <h1 class="hover-effect">
-#                 OP Status Update
-#             </h1>
-#         </div>
-#         """, unsafe_allow_html=True
-#     )
+with st.container(border=False):
+    st.markdown(
+        """
+        <div>
+            <h1 class="hover-effect">
+                OP Status Update
+            </h1>
+        </div>
+        """, unsafe_allow_html=True
+    )
 
-# col1, col2 = st.columns([1, 3])  # adjust the ratio as needed
-# with col1:
-#     source_type = st.selectbox("Select Source", ["MATILLION", "DBT"])
+col1, col2 = st.columns([1, 3])  # adjust the ratio as needed
+with col1:
+    source_type = st.selectbox("Select Source", ["MATILLION", "DBT"])
 @st.fragment
 def render_op_status_fragment():
     """Fragment UI with session state for operational status updates."""
@@ -315,7 +314,6 @@ def render_op_status_fragment():
         if source_type == "MATILLION":
             matillion_df = pd.concat([mat_table_task_df, mat_api_task_ids], ignore_index=True)
             matillion_df['TASK_HISTORY_ID'] = matillion_df['TASK_HISTORY_ID'].astype(int)
-            # Only drop duplicates by TASK_HISTORY_ID to keep all jobs with same name but different IDs
             matillion_df = matillion_df.drop_duplicates(subset=['TASK_HISTORY_ID'], keep='first')
             matillion_df = matillion_df.sort_values(by='TASK_HISTORY_ID', ascending=False)
             mat_task_id_with_name = [f"{task_id} - {job_tag}" for task_id, job_tag in zip(matillion_df['TASK_HISTORY_ID'], matillion_df['JOB_TAG_NAME'])]
@@ -323,14 +321,13 @@ def render_op_status_fragment():
         else:
             dbt_df = pd.concat([dbt_table_task_ids, dbt_api_task_ids], ignore_index=True)
             dbt_df['TASK_HISTORY_ID'] = dbt_df['TASK_HISTORY_ID'].astype(int)
-            # Only drop duplicates by TASK_HISTORY_ID to keep all jobs with same name but different IDs
             dbt_df = dbt_df.drop_duplicates(subset=['TASK_HISTORY_ID'], keep='first')
             dbt_df = dbt_df.sort_values(by='TASK_HISTORY_ID', ascending=False)
             dbt_task_id_with_name = [f"{task_id} - {schedule_name}" for task_id, schedule_name in zip(dbt_df['TASK_HISTORY_ID'], dbt_df['SCHEDULE_NAME'])]
             task_hist_id = dbt_task_id_with_name
         
         if len(task_hist_id) > 0:
-            task_history_id_with_name = st.selectbox("Select Task History ID", task_hist_id, key='task_select_box')
+            task_history_id_with_name = st.selectbox("Select Task History ID", task_hist_id)
             task_history_id = int(task_history_id_with_name.split(' - ')[0])
             comments = st.text_input("Enter Comments")
             reviewed = st.checkbox("Reviewed")
@@ -338,17 +335,17 @@ def render_op_status_fragment():
             st.warning('No Data Available')
         
         submit_button = st.form_submit_button(label="Save")
-
+    
     # Handle form submission
-    # Get user email from Snowflake session (current logged-in user)
+    # Get user email from session state, environment, or use default
+    import os
     try:
-        user_mail = session.sql("SELECT CURRENT_USER()").to_pandas().iloc[0, 0]
+        user_mail = os.getenv("SNOWFLAKE_USER", "observabilityservice@example.com")
     except:
         user_mail = "observabilityservice@example.com"
     
     if submit_button and len(task_hist_id) > 0:
         comments_escaped = comments.replace("'", "''")
-        reviewed_val = "TRUE" if reviewed else "FALSE"
         merge_query = f"""
         insert into EDW_LAB_DEV.OBSERVABILITY.JOBS_COMMENTS  (
         run_id,
@@ -362,7 +359,7 @@ def render_op_status_fragment():
         '{task_history_id}',
         '{source_type}',
         '{comments_escaped}',
-        {reviewed_val},
+        '{reviewed}',
         '{user_mail}',
          current_timestamp
     );
@@ -370,6 +367,7 @@ def render_op_status_fragment():
         data = session.sql(merge_query)
         st.write(data)
         st.success("Data merged successfully!")
+        st.write(user_mail)
 
 
 # Main page rendering
